@@ -1,0 +1,22 @@
+package com.simbiocreacion.resource.service;
+
+import com.simbiocreacion.resource.model.User;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+public interface IUserService {
+
+    Mono<User> create(User e);
+
+    Mono<User> findById(String id);
+
+    Flux<User> findByEmail(String email);
+
+    Flux<User> findAll();
+
+    Mono<User> update(User e);
+
+    Mono<Void> delete(String id);
+
+    Mono<Void> deleteAll();
+}
