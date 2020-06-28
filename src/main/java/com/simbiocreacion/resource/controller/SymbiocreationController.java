@@ -114,6 +114,16 @@ public class SymbiocreationController {
                 .flatMap(sWithIdeas -> this.symbioService.update(sWithIdeas));
     }
 
+    @PutMapping("/symbiocreations/{id}/updateName")
+    public Mono<Void> updateName(@PathVariable String id, @RequestBody Symbiocreation newSymbio) {
+        return this.symbioService.findById(id)
+                .flatMap(s -> {
+                    s.setName(newSymbio.getName());
+                    return this.symbioService.update(s);
+                })
+                .flatMap(s -> Mono.empty());
+    }
+
     @DeleteMapping("/symbiocreations/{id}")
     public Mono<Void> delete(@PathVariable String id) {
         return this.symbioService.delete(id);

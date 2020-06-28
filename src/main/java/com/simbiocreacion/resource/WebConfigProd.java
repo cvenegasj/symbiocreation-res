@@ -8,14 +8,14 @@ import org.springframework.web.reactive.config.WebFluxConfigurer;
 
 @Configuration
 @EnableWebFlux
-@Profile("dev")
-public class WebConfig implements WebFluxConfigurer {
+@Profile("prod")
+public class WebConfigProd implements WebFluxConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry corsRegistry) {
         corsRegistry.addMapping("/**")
-                .allowedOrigins("http://localhost:4200")
+                .allowedOrigins("https://symbiocreation-ui.vercel.app")
                 .allowedMethods("*");
-                //.maxAge(3600);
+        //.maxAge(3600);
     }
 }
