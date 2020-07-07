@@ -15,7 +15,9 @@ public class WebConfigProd implements WebFluxConfigurer {
     public void addCorsMappings(CorsRegistry corsRegistry) {
         corsRegistry.addMapping("/**")
                 .allowedOrigins("https://symbiocreation-ui.vercel.app")
-                .allowedMethods("*");
-        //.maxAge(3600);
+                //.allowedOrigins("*")
+                .allowedMethods("*")
+                .allowedHeaders("*")
+                .maxAge(3600);
     }
 }

@@ -15,7 +15,6 @@ import java.util.List;
 @NoArgsConstructor
 public class Node {
 
-    @Id
     private String id;
     private String u_id;
     @Transient
