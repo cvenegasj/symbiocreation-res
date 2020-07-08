@@ -17,7 +17,7 @@ import reactor.core.publisher.Mono;
 import java.util.*;
 
 @RestController
-@RequiredArgsConstructor
+//@RequiredArgsConstructor
 @Log4j2
 public class SymbiocreationController {
 
@@ -25,6 +25,11 @@ public class SymbiocreationController {
     private final UserService userService;
     //private final Mono<RSocketRequester> requester;
     private EmitterProcessor<Symbiocreation> processor = EmitterProcessor.create();
+
+    public SymbiocreationController(SymbiocreationService symbioService, UserService userService) {
+        this.symbioService = symbioService;
+        this.userService = userService;
+    }
 
     @PostMapping("/symbiocreations")
     public Mono<Symbiocreation> create(@RequestBody Symbiocreation s) {
@@ -178,7 +183,7 @@ public class SymbiocreationController {
                     newNode.setId(UUID.randomUUID().toString());
                     newNode.setU_id(p.getU_id());
                     newNode.setName(p.getUser().getFirstName());
-                    s.getGraph().add(new Node());
+                    s.getGraph().add(newNode);
 
                     s.setLastModified(new Date());
 
@@ -213,7 +218,8 @@ public class SymbiocreationController {
                     // remove child node from graph
                     s.setGraph(this.recurseAndDeleteNode(s.getGraph(), childId));
                     // add child node to parent
-                    s.setGraph(this.recurseAndAddNodeAsChild(s.getGraph(), child, parentId));
+                    if (parentId.equals("none")) s.getGraph().add(child);
+                    else s.setGraph(this.recurseAndAddNodeAsChild(s.getGraph(), child, parentId));
 
                     s.setLastModified(new Date());
 
