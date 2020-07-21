@@ -54,8 +54,8 @@ public class UserController {
     public void initDB() {
 
         Flux<User> saved = Flux.just(
-                new User(UUID.randomUUID().toString(), "First", "User", "first@user.com"),
-                new User(UUID.randomUUID().toString(), "Second", "User", "second@user.com")
+                new User(UUID.randomUUID().toString(), "First User", "First", "User", "first@user.com", "", false),
+                new User(UUID.randomUUID().toString(), "Second User", "Second", "User", "second@user.com", "", false)
         ).flatMap(userService::create);
 
         userService.deleteAll()

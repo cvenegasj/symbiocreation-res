@@ -6,15 +6,13 @@ import com.simbiocreacion.resource.model.Symbiocreation;
 import com.simbiocreacion.resource.model.User;
 import com.simbiocreacion.resource.service.SymbiocreationService;
 import com.simbiocreacion.resource.service.UserService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
-import reactor.core.publisher.EmitterProcessor;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
+import reactor.core.publisher.*;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @RestController
 //@RequiredArgsConstructor
@@ -24,23 +22,39 @@ public class SymbiocreationController {
     private final SymbiocreationService symbioService;
     private final UserService userService;
     //private final Mono<RSocketRequester> requester;
-    private EmitterProcessor<Symbiocreation> processor = EmitterProcessor.create();
+    static final FluxProcessor<Symbiocreation, Symbiocreation> processor = DirectProcessor.<Symbiocreation>create().serialize();
+    static final FluxSink sink = processor.sink();
 
     public SymbiocreationController(SymbiocreationService symbioService, UserService userService) {
         this.symbioService = symbioService;
         this.userService = userService;
+        //this.processor = EmitterProcessor.<Symbiocreation>create().serialize();
+        //this.sink = this.processor.sink();
     }
 
     @PostMapping("/symbiocreations")
     public Mono<Symbiocreation> create(@RequestBody Symbiocreation s) {
+        s.setLastModified(new Date());
+        // set id for creator node
+        Node nodeCreator = new Node();
+        nodeCreator.setId(UUID.randomUUID().toString());
+
+        Participant p = s.getParticipants().get(0); // s has the participant
+        nodeCreator.setU_id(p.getU_id());
+
+        if (p.getUser().getName() != null) nodeCreator.setName(p.getUser().getName());
+        if (p.getUser().getFirstName() != null && p.getUser().getLastName() != null) nodeCreator.setName(p.getUser().getFirstName() + " " + p.getUser().getLastName());
+
+        s.getGraph().add(nodeCreator);
+
         return symbioService.create(s);
     }
 
     @GetMapping("/symbiocreations/{id}")
     public Mono<Symbiocreation> findById(@PathVariable String id) {
         return symbioService.findById(id)
-                .flatMap(s -> this.completeUsers(s))
-                .flatMap(s -> this.removeIdeas(s));
+                .flatMap(this::completeUsers)
+                .flatMap(this::removeIdeas);
     }
 
     private Mono<Symbiocreation> completeUsers(Symbiocreation s) {
@@ -52,7 +66,7 @@ public class SymbiocreationController {
 
         return Mono.create(callback -> {
             usersFlux.subscribe(
-                    res -> log.info(res),
+                    res -> { /*log.info(res);*/ },
                     err -> log.error(err),
                     () -> {
                         // populate user field in participants
@@ -106,7 +120,26 @@ public class SymbiocreationController {
     public Flux<Symbiocreation> findByUserId(@PathVariable String userId) {
         // get user from session
         //userService.findById(fetchedId).flatMap(u -> this.symbioService.findByUserIdSingle(u.getId()));
-        return symbioService.findByUserIdSingle(userId);
+        return symbioService.findAllByUser(userId)
+                .flatMap(this::completeUsers);
+    }
+
+    @GetMapping("/symbiocreations/getAllPublic")
+    public Flux<Symbiocreation> findPublicAll() {
+        return symbioService.findAllByVisibility("public")
+                .flatMap(this::completeUsers);
+    }
+
+    @GetMapping("/symbiocreations/getUpcomingPublic")
+    public Flux<Symbiocreation> findPublicUpcoming() {
+        return symbioService.findUpcomingByVisibility("public", new Date())
+                .flatMap(this::completeUsers);
+    }
+
+    @GetMapping("/symbiocreations/getPastPublic")
+    public Flux<Symbiocreation> findPublicPast() {
+        return symbioService.findPastByVisibility("public", new Date())
+                .flatMap(this::completeUsers);
     }
 
     /*@PutMapping("/symbiocreations")
@@ -135,6 +168,33 @@ public class SymbiocreationController {
         return this.symbioService.findById(id)
                 .flatMap(s -> {
                     s.setName(newSymbio.getName());
+
+                    s.setLastModified(new Date());
+
+                    return this.symbioService.update(s);
+                })
+                .then();
+                //.flatMap(s -> Mono.empty());
+    }
+
+    @PutMapping("/symbiocreations/{id}/updateInfo")
+    public Mono<Void> updateInfo(@PathVariable String id, @RequestBody Symbiocreation newSymbio) {
+        return this.symbioService.findById(id)
+                .flatMap(s -> {
+                    s.setName(newSymbio.getName());
+                    s.setPlace(newSymbio.getPlace());
+                    s.setDateTime(newSymbio.getDateTime());
+                    s.setTimeZone(newSymbio.getTimeZone());
+                    s.setHasStartTime(newSymbio.getHasStartTime());
+
+                    s.setDescription(newSymbio.getDescription());
+                    s.setInfoUrl(newSymbio.getInfoUrl());
+                    s.setTags(newSymbio.getTags());
+                    s.setExtraUrls(newSymbio.getExtraUrls());
+                    s.setSdgs(newSymbio.getSdgs());
+
+                    //s.setEnabled();
+                    s.setVisibility(newSymbio.getVisibility());
 
                     s.setLastModified(new Date());
 
@@ -182,7 +242,9 @@ public class SymbiocreationController {
                     Node newNode = new Node();
                     newNode.setId(UUID.randomUUID().toString());
                     newNode.setU_id(p.getU_id());
-                    newNode.setName(p.getUser().getFirstName());
+                    if (p.getUser().getName() != null) newNode.setName(p.getUser().getName());
+                    if (p.getUser().getFirstName() != null && p.getUser().getLastName() != null) newNode.setName(p.getUser().getFirstName() + " " + p.getUser().getLastName());
+
                     s.getGraph().add(newNode);
 
                     s.setLastModified(new Date());
@@ -191,9 +253,10 @@ public class SymbiocreationController {
                 })
                 .flatMap(this::completeUsers)
                 .flatMap(this::removeIdeas)
-                .doOnNext(this.processor::onNext);
+                .doOnNext(this.sink::next);
     }
 
+    /*
     @PostMapping("/symbiocreations/{id}/createGroupNode")
     public Mono<Symbiocreation> createGroupNode(@PathVariable String id, @RequestBody Node n) {
         return this.symbioService.findById(id)
@@ -207,27 +270,80 @@ public class SymbiocreationController {
                 })
                 .flatMap(this::completeUsers)
                 .flatMap(this::removeIdeas)
-                .doOnNext(this.processor::onNext);
-    }
+                .doOnNext(this.sink::next);
+    } */
 
-    @GetMapping("/symbiocreations/{id}/setParentNode/{childId}/{parentId}")
-    public Mono<Symbiocreation> setParentNode(@PathVariable String id, @PathVariable String childId, @PathVariable String parentId) {
+    @PostMapping("/symbiocreations/{id}/createNextLevelGroup/{childId}")
+    public Mono<Symbiocreation> createNextLevelGroup(@PathVariable String id, @PathVariable String childId, @RequestBody Node nextLevelNode) {
         return this.symbioService.findById(id)
                 .flatMap(s -> {
+                    nextLevelNode.setId(UUID.randomUUID().toString());
+
+                    // get child node
                     Node child = this.traverseAndGetNode(s.getGraph(), childId);
                     // remove child node from graph
                     s.setGraph(this.recurseAndDeleteNode(s.getGraph(), childId));
                     // add child node to parent
-                    if (parentId.equals("none")) s.getGraph().add(child);
-                    else s.setGraph(this.recurseAndAddNodeAsChild(s.getGraph(), child, parentId));
+                    nextLevelNode.getChildren().add(child);
+                    s.getGraph().add(nextLevelNode);
 
-                    s.setLastModified(new Date());
+                    // set child as 'ambassador' if child is a user node.
+                    if (child.getU_id() != null) {
+                        for (int i = 0; i < s.getParticipants().size(); i++) {
+                            // update role if not ambassador
+                            if (s.getParticipants().get(i).getU_id().equals(child.getU_id())
+                                    && !s.getParticipants().get(i).getRole().equals("moderator")) {
+                                s.getParticipants().get(i).setRole("ambassador");
+                            }
+                        }
+                    }
 
                     return this.symbioService.update(s);
                 })
                 .flatMap(this::completeUsers)
                 .flatMap(this::removeIdeas)
-                .doOnNext(this.processor::onNext);
+                .doOnNext(this.sink::next);
+    }
+
+
+    @GetMapping("/symbiocreations/{id}/setParentNode/{childId}/{parentId}")
+    public Mono<Symbiocreation> setParentNode(@PathVariable String id, @PathVariable String childId, @PathVariable String parentId) {
+        return this.symbioService.findById(id)
+                .flatMap(s -> {
+                    int n1 = this.traverseAndCount(s.getGraph());
+
+                    Node child = this.traverseAndGetNode(s.getGraph(), childId);
+                    // remove child node from graph
+                    s.setGraph(this.recurseAndDeleteNode(s.getGraph(), childId));
+
+                    // if child is user node, lose ambassador role
+                    if (child.getU_id() != null) {
+                        for (int i = 0; i < s.getParticipants().size(); i++) {
+                            if (s.getParticipants().get(i).getU_id().equals(child.getU_id())
+                                && !s.getParticipants().get(i).getRole().equals("moderator")) {
+                                s.getParticipants().get(i).setRole("participant");
+                            }
+                        }
+                    }
+
+                    // add child node to parent
+                    if (parentId.equals("none")) s.getGraph().add(child);
+                    else s.setGraph(this.recurseAndAddNodeAsChild(s.getGraph(), child, parentId));
+
+                    int n2 = this.traverseAndCount(s.getGraph());
+
+                    // safe-check (just in case!)
+                    // sizes of pre and post graphs should match
+                    if (n1 == n2) {
+                        s.setLastModified(new Date());
+                        return this.symbioService.update(s);
+                    } else {
+                        return Mono.empty();
+                    }
+                })
+                .flatMap(this::completeUsers)
+                .flatMap(this::removeIdeas)
+                .doOnNext(this.sink::next);
     }
 
     @DeleteMapping("/symbiocreations/{id}/deleteNode/{nodeId}")
@@ -236,7 +352,22 @@ public class SymbiocreationController {
                 .flatMap(s -> {
                     Node toDelete = this.traverseAndGetNode(s.getGraph(), nodeId);
                     s.setGraph(this.recurseAndDeleteNode(s.getGraph(), nodeId));
-                    if (toDelete.getChildren() != null) s.getGraph().addAll(toDelete.getChildren());
+                    // if group node
+                    if (toDelete.getChildren() != null) {
+                        s.getGraph().addAll(toDelete.getChildren());
+
+                        // all ambassador members lose their roles
+                        toDelete.getChildren().forEach(child -> {
+                            if (child.getU_id() != null) {
+                                for (int i = 0; i < s.getParticipants().size(); i++) {
+                                    if (s.getParticipants().get(i).getU_id().equals(child.getU_id())
+                                            && !s.getParticipants().get(i).getRole().equals("moderator")) {
+                                        s.getParticipants().get(i).setRole("participant");
+                                    }
+                                }
+                            }
+                        });
+                    }
 
                     s.setLastModified(new Date());
 
@@ -244,8 +375,7 @@ public class SymbiocreationController {
                 })
                 .flatMap(this::completeUsers)
                 .flatMap(this::removeIdeas)
-                .doOnNext(this.processor::onNext);
-
+                .doOnNext(this.sink::next);
     }
 
     @PutMapping("/symbiocreations/{id}/updateNodeName")
@@ -260,7 +390,28 @@ public class SymbiocreationController {
                 })
                 .flatMap(this::completeUsers)
                 .flatMap(this::removeIdeas)
-                .doOnNext(this.processor::onNext);
+                .doOnNext(this.sink::next);
+    }
+
+    // participant contains u_id and new role
+    @PutMapping("/symbiocreations/{id}/updateParticipantRole")
+    public Mono<Symbiocreation> updateParticipantRole(@PathVariable String id, @RequestBody Participant participant) {
+        return this.symbioService.findById(id)
+                .flatMap(s -> {
+                    for (int i = 0; i < s.getParticipants().size(); i++) {
+                        if (s.getParticipants().get(i).getU_id().equals(participant.getU_id())) {
+                            s.getParticipants().get(i).setRole(participant.getRole());
+                            break;
+                        }
+                    }
+
+                    //s.setLastModified(new Date());
+
+                    return this.symbioService.update(s);
+                })
+                .flatMap(this::completeUsers)
+                .flatMap(this::removeIdeas)
+                .doOnNext(this.sink::next);
     }
 
 
@@ -270,7 +421,8 @@ public class SymbiocreationController {
     public Flux<Symbiocreation> streamUpdatesSymbios(@PathVariable String id) {
         //return requester.flatMapMany(r -> r.route("listen.symbio").data("5ef8388cae6aab3379ab9007").retrieveFlux(Symbiocreation.class));
         return this.processor
-                .share()
+                //.map(e -> e);
+                //.share()
                 .filter(s -> s.getId().equals(id));
     }
 
@@ -314,13 +466,28 @@ public class SymbiocreationController {
         return nodes;
     }
 
+    private int traverseAndCount(List<Node> nodes) {
+        int counter = 0;
+        Stack<Node> stack = new Stack<Node>();
+        nodes.forEach(node -> stack.push(node));
+        Node current;
+
+        while (!stack.isEmpty()) {
+            current = stack.pop();
+            counter++;
+
+            if (current.getChildren() != null) current.getChildren().forEach(child -> stack.push(child));
+        }
+        return counter;
+    }
+
     private Node traverseAndGetNode(List<Node> nodes, String nodeId) {
         Node n = null;
         Stack<Node> stack = new Stack<Node>();
         nodes.forEach(node -> stack.push(node));
         Node current;
 
-        while(!stack.isEmpty()) {
+        while (!stack.isEmpty()) {
             current = stack.pop();
             if (current.getId().equals(nodeId)) {
                 n = current;

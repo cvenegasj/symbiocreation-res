@@ -7,6 +7,8 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Date;
+
 @Service
 public class SymbiocreationService implements ISymbiocreationService {
 
@@ -34,8 +36,23 @@ public class SymbiocreationService implements ISymbiocreationService {
     }
 
     @Override
-    public Flux<Symbiocreation> findByUserIdSingle(String userId) {
-        return symbioRepository.findByUserIdSingle(userId);
+    public Flux<Symbiocreation> findAllByUser(String userId) {
+        return symbioRepository.findAllByUser(userId);
+    }
+
+    @Override
+    public Flux<Symbiocreation> findAllByVisibility(String visibility) {
+        return symbioRepository.findAllByVisibility(visibility);
+    }
+
+    @Override
+    public Flux<Symbiocreation> findUpcomingByVisibility(String visibility, Date now) {
+        return symbioRepository.findUpcomingByVisibility(visibility, now);
+    }
+
+    @Override
+    public Flux<Symbiocreation> findPastByVisibility(String visibility, Date now) {
+        return symbioRepository.findPastByVisibility(visibility, now);
     }
 
     @Override

@@ -22,5 +22,6 @@ public class Node {
     private String name;
     //@JsonDeserialize
     private Idea idea;
+
     private List<Node> children;
 }

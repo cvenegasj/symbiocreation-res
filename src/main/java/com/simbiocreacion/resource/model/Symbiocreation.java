@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+//import java.time.Instant;
 import java.util.Date;
 import java.util.List;
 
@@ -18,6 +19,18 @@ public class Symbiocreation {
     @Id
     private String id;
     private String name;
+
+    private String place;
+    private Date dateTime; // Java 8 date types do not serialize properly :(
+    private String timeZone;
+    private Boolean hasStartTime;
+
+    private String description;
+    private String infoUrl;
+    private List<String> tags;
+    private List<String> extraUrls;
+    private List<String> sdgs;
+
     private Date lastModified;
     private boolean enabled;
     private String visibility;

@@ -21,15 +21,17 @@ public class SymbiocreationRepositoryImpl implements SymbiocreationRepositoryCus
     }
 
     @Override
-    public Flux<Symbiocreation> findByUserIdSingle(String userId) {
+    public Flux<Symbiocreation> findByUserId(String userId) {
         //LookupOperation lookup = Aggregation.lookup("user", "participants.user", "_id", "");
 
         MatchOperation matchStage = Aggregation.match(new Criteria("participants.u_id").is(userId));
-        ProjectionOperation projectStage = Aggregation.project("name", "lastModified", "enabled", "visibility")
-                .and(filter("participants")
-                    .as("participant")
-                    .by(valueOf("participant.u_id").equalToValue(userId))
-                    ).as("participants")
+        ProjectionOperation projectStage = Aggregation.project("name", "participants", "lastModified", "enabled", "visibility",
+                    "place", "dateTime", "timeZone", "hasStartTime", "description",
+                    "infoUrl", "tags", "extraUrls", "sdgs")
+                //.and(filter("participants")
+                //    .as("participant")
+                //    .by(valueOf("participant.u_id").equalToValue(userId))
+                //    ).as("participants")
                 .and("participants")
                     .size()
                     .as("nParticipants");
