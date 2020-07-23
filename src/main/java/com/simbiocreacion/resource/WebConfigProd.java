@@ -14,7 +14,7 @@ public class WebConfigProd implements WebFluxConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry corsRegistry) {
         corsRegistry.addMapping("/**")
-                .allowedOrigins("https://symbiocreation-ui.vercel.app")
+                .allowedOrigins("https://app.simbiocreacion.com")
                 //.allowedOrigins("*")
                 .allowedMethods("*")
                 .allowedHeaders("*")
