@@ -7,10 +7,16 @@ import com.simbiocreacion.resource.model.User;
 import com.simbiocreacion.resource.service.SymbiocreationService;
 import com.simbiocreacion.resource.service.UserService;
 import lombok.extern.log4j.Log4j2;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.*;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -412,6 +418,26 @@ public class SymbiocreationController {
                 .flatMap(this::completeUsers)
                 .flatMap(this::removeIdeas)
                 .doOnNext(this.sink::next);
+    }
+
+    @GetMapping("/symbiocreations/{id}/export-participants")
+    @ResponseBody
+    public ResponseEntity<Mono<Resource>> downloadParticipantsData(@PathVariable String id) {
+        List<User> users = new ArrayList();
+        // populate list
+        Mono fetchedContent = symbioService.findById(id)
+                .flatMapIterable(s -> s.getParticipants())
+                .flatMap(p -> this.userService.findById(p.getU_id()))
+                .map(users::add)
+                .then(this.symbioService.generateCsv(users))
+                .map(res -> new InputStreamResource(res));
+
+
+        String fileName = "participants-data-" + id + ".csv";
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,  "attachment; filename=" + fileName)
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_OCTET_STREAM_VALUE)
+                .body(fetchedContent);
     }
 
 

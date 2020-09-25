@@ -1,13 +1,26 @@
 package com.simbiocreacion.resource.service;
 
+import com.opencsv.CSVWriter;
+import com.opencsv.bean.ColumnPositionMappingStrategy;
+import com.opencsv.bean.StatefulBeanToCsv;
+import com.opencsv.bean.StatefulBeanToCsvBuilder;
+import com.opencsv.exceptions.CsvException;
 import com.simbiocreacion.resource.model.Symbiocreation;
+import com.simbiocreacion.resource.model.User;
 import com.simbiocreacion.resource.repository.SymbiocreationRepository;
+import com.simbiocreacion.resource.util.ByteArrayInOutStream;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 @Service
 public class SymbiocreationService implements ISymbiocreationService {
@@ -69,4 +82,37 @@ public class SymbiocreationService implements ISymbiocreationService {
     public Mono<Void> deleteAll() {
         return symbioRepository.deleteAll();
     }
+
+    // CSV writer
+    public Mono<ByteArrayInputStream> generateCsv(List<User> users){
+        String[] columns = {"Id", "Name", "FirstName", "LastName", "Email"};
+
+        return Mono.fromCallable(() -> {
+            try {
+                ByteArrayInOutStream stream = new ByteArrayInOutStream();
+                OutputStreamWriter streamWriter = new OutputStreamWriter(stream);
+                CSVWriter writer = new CSVWriter(streamWriter);
+
+                ColumnPositionMappingStrategy mappingStrategy = new ColumnPositionMappingStrategy();
+                mappingStrategy.setType(User.class);
+                mappingStrategy.setColumnMapping(columns);
+                writer.writeNext(columns);
+
+                StatefulBeanToCsv beanToCsv = new StatefulBeanToCsvBuilder(writer)
+                        .withQuotechar(CSVWriter.NO_QUOTE_CHARACTER)
+                        .withMappingStrategy(mappingStrategy)
+                        .withSeparator(',')
+                        .build();
+
+                beanToCsv.write(users);
+                streamWriter.flush();
+                return stream.getInputStream();
+            }
+            catch (CsvException | IOException e) {
+                throw new RuntimeException(e);
+            }
+
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
 }
