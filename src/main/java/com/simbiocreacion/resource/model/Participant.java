@@ -13,8 +13,5 @@ public class Participant {
     private String u_id;
     @Transient
     private User user;
-    private String role;
-    //@Transient
-    //private Idea idea;
-    //private String groupName;
+    private Boolean isModerator;
 }

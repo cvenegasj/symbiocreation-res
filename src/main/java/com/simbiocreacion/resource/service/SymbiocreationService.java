@@ -10,6 +10,7 @@ import com.simbiocreacion.resource.model.User;
 import com.simbiocreacion.resource.repository.SymbiocreationRepository;
 import com.simbiocreacion.resource.util.ByteArrayInOutStream;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -18,7 +19,6 @@ import reactor.core.scheduler.Schedulers;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -49,23 +49,23 @@ public class SymbiocreationService implements ISymbiocreationService {
     }
 
     @Override
-    public Flux<Symbiocreation> findAllByUser(String userId) {
-        return symbioRepository.findAllByUser(userId);
+    public Flux<Symbiocreation> findAllByUser(String userId, Pageable pageable) {
+        return symbioRepository.findAllByUser(userId, pageable);
     }
 
     @Override
-    public Flux<Symbiocreation> findAllByVisibility(String visibility) {
-        return symbioRepository.findAllByVisibility(visibility);
+    public Flux<Symbiocreation> findByVisibilityOrderByLastModifiedDesc(String visibility, Pageable pageable) {
+        return symbioRepository.findByVisibilityOrderByLastModifiedDesc(visibility, pageable);
     }
 
     @Override
-    public Flux<Symbiocreation> findUpcomingByVisibility(String visibility, Date now) {
-        return symbioRepository.findUpcomingByVisibility(visibility, now);
+    public Flux<Symbiocreation> findByVisibilityAndDateTimeLessThanEqual(String visibility, Date now, Pageable pageable) {
+        return symbioRepository.findByVisibilityAndDateTimeLessThanEqual(visibility, now, pageable);
     }
 
     @Override
-    public Flux<Symbiocreation> findPastByVisibility(String visibility, Date now) {
-        return symbioRepository.findPastByVisibility(visibility, now);
+    public Flux<Symbiocreation> findByVisibilityAndDateTimeGreaterThanEqual(String visibility, Date now, Pageable pageable) {
+        return symbioRepository.findByVisibilityAndDateTimeGreaterThanEqual(visibility, now, pageable);
     }
 
     @Override
@@ -81,6 +81,22 @@ public class SymbiocreationService implements ISymbiocreationService {
     @Override
     public Mono<Void> deleteAll() {
         return symbioRepository.deleteAll();
+    }
+
+    public Mono<Long> countByVisibility(String visibility) {
+        return symbioRepository.countByVisibility(visibility);
+    }
+
+    public Mono<Long> countByVisibilityAndDateTimeLessThanEqual(String visibility, Date dateTime) {
+        return symbioRepository.countByVisibilityAndDateTimeLessThanEqual(visibility, dateTime);
+    }
+
+    public Mono<Long> countByVisibilityAndDateTimeGreaterThanEqual(String visibility, Date dateTime) {
+        return symbioRepository.countByVisibilityAndDateTimeGreaterThanEqual(visibility, dateTime);
+    }
+
+    public Mono<Long> countByUser(String userId) {
+        return symbioRepository.countByParticipantsU_id(userId);
     }
 
     // CSV writer
@@ -114,5 +130,4 @@ public class SymbiocreationService implements ISymbiocreationService {
 
         }).subscribeOn(Schedulers.boundedElastic());
     }
-
 }

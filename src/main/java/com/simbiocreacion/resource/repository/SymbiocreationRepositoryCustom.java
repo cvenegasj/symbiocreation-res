@@ -6,4 +6,5 @@ import reactor.core.publisher.Flux;
 public interface SymbiocreationRepositoryCustom {
 
     Flux<Symbiocreation> findByUserId(String userId);
+
 }
