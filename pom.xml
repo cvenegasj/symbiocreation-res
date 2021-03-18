@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.simbiocreacion</groupId>
 	<artifactId>symbiocreation-res</artifactId>
-	<version>1.5</version>
+	<version>1.5.1</version>
 	<name>symbiocreation-res</name>
 	<description>Demo project for Spring Boot</description>
 

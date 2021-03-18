@@ -266,13 +266,11 @@ public class SymbiocreationController {
     @PutMapping("/symbiocreations/{id}/updateNodeIdea")
     public Mono<Node> updateNodeIdea(@PathVariable String id, @RequestBody Node newNode) {
         return this.symbioService.findById(id)
-                .map(s -> {
-                    //s.getGraph().replaceAll(node -> recurseAndReplaceIdea(node, newNode));
-
+                .flatMap(s -> {
+                    this.recurseAndReplaceIdea(s.getGraph(), newNode);
                     s.setLastModified(new Date());
-                    return s;
+                    return this.symbioService.update(s);
                 })
-                .flatMap(this.symbioService::update)
                 .flatMap(this::completeUsers)
                 .doOnNext(this.sink::next)
                 .thenReturn(newNode);
@@ -512,12 +510,12 @@ public class SymbiocreationController {
     /****************** Graph traversal helpers **********************/
 
     private void recurseAndReplaceIdea(List<Node> nodes, Node newNode) {
-        nodes.forEach(node -> {
-            if (node.getId().equals(newNode.getId())) {
-                node.setIdea(newNode.getIdea());
+        nodes.forEach(n -> {
+            if (n.getId().equals(newNode.getId())) {
+                n.setIdea(newNode.getIdea());
                 return;
             }
-            if (node.getChildren() != null) this.recurseAndReplaceIdea(node.getChildren(), newNode);
+            if (n.getChildren() != null) this.recurseAndReplaceIdea(n.getChildren(), newNode);
         });
     }
 
@@ -542,7 +540,6 @@ public class SymbiocreationController {
                 return;
             }
             if (n.getChildren() != null) this.recurseAndAddNodeAsChild(n.getChildren(), child, parentId);
-
         });
     }
 
