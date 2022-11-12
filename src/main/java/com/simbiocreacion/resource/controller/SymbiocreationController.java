@@ -1,7 +1,7 @@
 package com.simbiocreacion.resource.controller;
 
 import com.simbiocreacion.resource.model.*;
-import com.simbiocreacion.resource.service.SymbiocreationService;
+import com.simbiocreacion.resource.service.ISymbiocreationService;
 import com.simbiocreacion.resource.service.UserService;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.core.io.InputStreamResource;
@@ -16,19 +16,20 @@ import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.*;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 //@RequiredArgsConstructor
 @Log4j2
 public class SymbiocreationController {
 
-    private final SymbiocreationService symbioService;
+    private final ISymbiocreationService symbioService;
     private final UserService userService;
     //private final Mono<RSocketRequester> requester;
     static final FluxProcessor<Symbiocreation, Symbiocreation> processor = DirectProcessor.<Symbiocreation>create().serialize();
     static final FluxSink sink = processor.sink();
 
-    public SymbiocreationController(SymbiocreationService symbioService, UserService userService) {
+    public SymbiocreationController(ISymbiocreationService symbioService, UserService userService) {
         this.symbioService = symbioService;
         this.userService = userService;
         //this.processor = EmitterProcessor.<Symbiocreation>create().serialize();
@@ -348,7 +349,6 @@ public class SymbiocreationController {
                 .doOnNext(this.sink::next);
     }
 
-
     @GetMapping("/symbiocreations/{id}/setParentNode/{childId}/{parentId}")
     public Mono<Symbiocreation> setParentNode(@PathVariable String id, @PathVariable String childId, @PathVariable String parentId) {
         return this.symbioService.findById(id)
@@ -474,19 +474,32 @@ public class SymbiocreationController {
                 .doOnNext(this.sink::next);
     }
 
-    @GetMapping("/symbiocreations/{id}/export-participants")
+    @GetMapping("/symbiocreations/{symbioId}/export-participants-data")
     @ResponseBody
-    public ResponseEntity<Mono<Resource>> downloadParticipantsData(@PathVariable String id) {
-        List<User> users = new ArrayList();
-        // populate list
-        Mono fetchedContent = symbioService.findById(id)
+    public ResponseEntity<Mono<Resource>> downloadParticipantsData(@PathVariable String symbioId) {
+        Mono fetchedContent = symbioService.findById(symbioId)
                 .flatMapIterable(s -> s.getParticipants())
                 .flatMap(p -> this.userService.findById(p.getU_id()))
-                .map(users::add)
-                .then(this.symbioService.generateCsv(users))
-                .map(res -> new InputStreamResource(res));
+                .collect(Collectors.toList())
+                .flatMap(users -> this.symbioService.generateParticipantsDataCsv(users))
+                .map(InputStreamResource::new);
 
-        String fileName = "participants-data-" + id + ".csv";
+        String fileName = "participants-data-" + symbioId + ".csv";
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,  "attachment; filename=" + fileName)
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_OCTET_STREAM_VALUE)
+                .body(fetchedContent);
+    }
+
+    @GetMapping("/symbiocreations/{symbioId}/export-all-data")
+    @ResponseBody
+    public ResponseEntity<Mono<Resource>> downloadAllData(@PathVariable String symbioId) {
+        Mono fetchedContent = symbioService.findById(symbioId)
+                .flatMap(this::completeUsers)
+                .flatMap(this.symbioService::generateAllDataCsv)
+                .map(InputStreamResource::new);
+
+        String fileName = "all-data-" + symbioId + ".csv";
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,  "attachment; filename=" + fileName)
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_OCTET_STREAM_VALUE)

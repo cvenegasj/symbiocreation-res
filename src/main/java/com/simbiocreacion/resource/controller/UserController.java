@@ -1,9 +1,6 @@
 package com.simbiocreacion.resource.controller;
 
-import com.simbiocreacion.resource.model.Idea;
 import com.simbiocreacion.resource.model.User;
-import com.simbiocreacion.resource.model.Node;
-import com.simbiocreacion.resource.service.SymbiocreationService;
 import com.simbiocreacion.resource.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -20,7 +17,6 @@ import java.util.UUID;
 public class UserController {
 
     private final UserService userService;
-    private final SymbiocreationService symbioService;
 
     @PostMapping("/users")
     public Mono<User> create(@RequestBody User u) {

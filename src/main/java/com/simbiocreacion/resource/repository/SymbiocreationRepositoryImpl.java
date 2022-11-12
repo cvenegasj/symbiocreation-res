@@ -1,15 +1,12 @@
 package com.simbiocreacion.resource.repository;
 
 import com.simbiocreacion.resource.model.Symbiocreation;
-import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.*;
 import org.springframework.data.mongodb.core.query.Criteria;
 import reactor.core.publisher.Flux;
-import static org.springframework.data.mongodb.core.aggregation.ArrayOperators.Filter.filter;
-import static org.springframework.data.mongodb.core.aggregation.ComparisonOperators.Eq.valueOf;
 
 public class SymbiocreationRepositoryImpl implements SymbiocreationRepositoryCustom {
 

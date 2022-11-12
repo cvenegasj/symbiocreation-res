@@ -17,5 +17,4 @@ public class RSocketController {
                 .share()
                 .filter(s -> s.getId().equals(id));
     }
-
 }

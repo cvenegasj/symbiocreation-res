@@ -1,12 +1,15 @@
 package com.simbiocreacion.resource.service;
 
 import com.simbiocreacion.resource.model.Symbiocreation;
+import com.simbiocreacion.resource.model.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.io.ByteArrayInputStream;
 import java.util.Date;
+import java.util.List;
 
 public interface ISymbiocreationService {
 
@@ -41,4 +44,8 @@ public interface ISymbiocreationService {
     Mono<Long> countByVisibilityAndDateTimeGreaterThanEqual(String visibility, Date dateTime);
 
     Mono<Long> countByUser(String userId);
+
+    Mono<ByteArrayInputStream> generateParticipantsDataCsv(List<User> users);
+
+    Mono<ByteArrayInputStream> generateAllDataCsv(Symbiocreation symbiocreation);
 }
