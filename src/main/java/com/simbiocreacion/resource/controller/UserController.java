@@ -1,5 +1,6 @@
 package com.simbiocreacion.resource.controller;
 
+import com.simbiocreacion.resource.model.Role;
 import com.simbiocreacion.resource.model.User;
 import com.simbiocreacion.resource.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -48,8 +49,11 @@ public class UserController {
     @GetMapping("/users/init")
     public void initDB() {
         Flux<User> saved = Flux.just(
-                new User(UUID.randomUUID().toString(), "First User", "First", "User", "first@user.com", "", false),
-                new User(UUID.randomUUID().toString(), "Second User", "Second", "User", "second@user.com", "", false)
+                new User(
+                        UUID.randomUUID().toString(), "First User", "First",
+                        "User", "first@user.com", "", false, Role.USER.toString()),
+                new User(UUID.randomUUID().toString(), "Second User", "Second",
+                        "User", "second@user.com", "", false, Role.USER.toString())
         ).flatMap(userService::create);
 
         userService.deleteAll()

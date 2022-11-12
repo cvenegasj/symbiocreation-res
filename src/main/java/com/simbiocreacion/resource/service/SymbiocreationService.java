@@ -140,12 +140,12 @@ public class SymbiocreationService implements ISymbiocreationService {
 
     public Mono<ByteArrayInputStream> generateAllDataCsv(Symbiocreation symbiocreation) {
         final Set<Node> roots = this.findTreeRoots(symbiocreation); // find roots of symbio object (can have many trees)
-        System.out.println("root found: " + roots.size());
-        System.out.println("roots: " + roots.stream().map(Node::getName).collect(Collectors.toSet()));
+//        System.out.println("root found: " + roots.size());
+//        System.out.println("roots: " + roots.stream().map(Node::getName).collect(Collectors.toSet()));
 
         final Set<Node> singles = this.findSingleNodes(symbiocreation); // find single nodes
-        System.out.println("singles found: " + singles.size());
-        System.out.println("singles: " + singles.toString());
+//        System.out.println("singles found: " + singles.size());
+//        System.out.println("singles: " + singles.toString());
 
         // write CSV content
         return Mono.fromCallable(() -> {
@@ -155,19 +155,19 @@ public class SymbiocreationService implements ISymbiocreationService {
                 CSVWriter writer = new CSVWriter(streamWriter);
 
                 // Write Symbio info
-                String[] lineData = {"Symbiocreation"};
+                String[] lineData = {"Simbiocreación"};
                 writer.writeNext(lineData);
 
                 lineData = new String[] {"ID", symbiocreation.getId()};
                 writer.writeNext(lineData);
 
-                lineData = new String[] {"Name", symbiocreation.getName()};
+                lineData = new String[] {"Nombre", symbiocreation.getName()};
                 writer.writeNext(lineData);
 
-                lineData = new String[] {"Description", symbiocreation.getDescription()};
+                lineData = new String[] {"Descripción", symbiocreation.getDescription()};
                 writer.writeNext(lineData);
 
-                lineData = new String[] {"Place", symbiocreation.getPlace() != null ?
+                lineData = new String[] {"Lugar", symbiocreation.getPlace() != null ?
                         symbiocreation.getPlace() : ""};
                 writer.writeNext(lineData);
 
@@ -175,12 +175,12 @@ public class SymbiocreationService implements ISymbiocreationService {
                         symbiocreation.getDateTime().toString() : ""};
                 writer.writeNext(lineData);
 
-                lineData = new String[] {"Participants number", String.valueOf(symbiocreation.getParticipants().size())};
+                lineData = new String[] {"Número de participantes", String.valueOf(symbiocreation.getParticipants().size())};
                 writer.writeNext(lineData);
 
                 writer.writeNext(new String[] {}); // empty line
 
-                lineData = new String[] {"Participants"};
+                lineData = new String[] {"Participantes"};
                 writer.writeNext(lineData);
 
                 for (var participant : symbiocreation.getParticipants()) {
@@ -191,7 +191,7 @@ public class SymbiocreationService implements ISymbiocreationService {
                 writer.writeNext(new String[] {}); // empty line
                 writer.writeNext(new String[] {}); // empty line
 
-                lineData = new String[] {"Graph"};
+                lineData = new String[] {"Grafo"};
                 writer.writeNext(lineData);
 
                 // Tree roots
@@ -204,7 +204,7 @@ public class SymbiocreationService implements ISymbiocreationService {
 
                     for (int i = levels.size() - 1; i >= 0; i--) {
                         // write level header with reversed numbering
-                        String[] levelHeader = {"Level " + String.valueOf(levels.size() - i - 1)};
+                        String[] levelHeader = {"Nivel " + String.valueOf(levels.size() - i - 1)};
                         writer.writeNext(levelHeader);
 
                         for (Node node : levels.get(i)) {
@@ -220,7 +220,7 @@ public class SymbiocreationService implements ISymbiocreationService {
                                 };
                                 writer.writeNext(line);
                             } else { // level with group nodes
-                                String[] line = {"Group: " + node.getName()};
+                                String[] line = {"Grupo: " + node.getName()};
                                 writer.writeNext(line);
 
                                 line = new String[] {
@@ -232,13 +232,13 @@ public class SymbiocreationService implements ISymbiocreationService {
 
                                 line = new String[] {
                                         "",
-                                        "Description",
+                                        "Descripción",
                                         node.getIdea() != null ? node.getIdea().getDescription() : ""
                                 };
                                 writer.writeNext(line);
 
                                 // write participants of the group
-                                line = new String[] {"", "Members"};
+                                line = new String[] {"", "Miembros"};
                                 writer.writeNext(line);
 
                                 for (var leaf : nodesLeaves.get(node)) {
@@ -247,6 +247,12 @@ public class SymbiocreationService implements ISymbiocreationService {
                                 }
                             }
 
+                            if (i < levels.size() - 1) {
+                                writer.writeNext(new String[] {}); // empty line
+                            }
+                        }
+
+                        if (i == levels.size() - 1) {
                             writer.writeNext(new String[] {}); // empty line
                         }
                     }
@@ -254,7 +260,7 @@ public class SymbiocreationService implements ISymbiocreationService {
                     writer.writeNext(new String[] {}); // empty line
                 }
 
-                writer.writeNext(new String[] {}); // empty line
+                //writer.writeNext(new String[] {}); // empty line
                 if (!singles.isEmpty()) {
                     writer.writeNext(new String[] {"=============="});
                 }

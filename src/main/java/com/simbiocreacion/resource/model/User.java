@@ -20,4 +20,5 @@ public class User {
     private String email;
     private String pictureUrl;
     private Boolean isGridViewOn;
+    private String role;
 }
