@@ -242,7 +242,11 @@ public class SymbiocreationService implements ISymbiocreationService {
                                 writer.writeNext(line);
 
                                 for (var leaf : nodesLeaves.get(node)) {
-                                    line = new String[] {"", "", leaf.getUser().getName(), leaf.getUser().getEmail()};
+                                    line = new String[] {
+                                            "",
+                                            "",
+                                            leaf.getUser() != null ? leaf.getUser().getName() : "",
+                                            leaf.getUser() != null ? leaf.getUser().getEmail() : ""};
                                     writer.writeNext(line);
                                 }
                             }
@@ -267,8 +271,9 @@ public class SymbiocreationService implements ISymbiocreationService {
 
                 // Single Nodes
                 for (Node node : singles) {
-                    node.setUser(userService.findById(node.getU_id()).block());
+                    if (node.getUser() == null) continue;
 
+                    node.setUser(userService.findById(node.getU_id()).block());
                     lineData = new String[] {
                             node.getUser().getName(),
                             node.getUser().getEmail(),
