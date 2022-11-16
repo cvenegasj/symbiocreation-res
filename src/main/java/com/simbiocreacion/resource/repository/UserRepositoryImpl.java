@@ -1,45 +1,16 @@
 package com.simbiocreacion.resource.repository;
 
-import com.simbiocreacion.resource.model.Symbiocreation;
 import lombok.RequiredArgsConstructor;
 import org.bson.Document;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.*;
-import org.springframework.data.mongodb.core.query.Criteria;
 import reactor.core.publisher.Flux;
 
 @RequiredArgsConstructor
-public class SymbiocreationRepositoryImpl implements SymbiocreationRepositoryCustom {
+public class UserRepositoryImpl implements UserRepositoryCustom {
 
     private final ReactiveMongoTemplate rxMongoTemplate;
-
-    @Override
-    public Flux<Symbiocreation> findByUserId(String userId) {
-        //LookupOperation lookup = Aggregation.lookup("user", "participants.user", "_id", "");
-
-        MatchOperation matchStage = Aggregation.match(new Criteria("participants.u_id").is(userId));
-        ProjectionOperation projectStage = Aggregation.project("name", "participants", "lastModified", "enabled", "visibility",
-                    "place", "dateTime", "timeZone", "hasStartTime", "description",
-                    "infoUrl", "tags", "extraUrls", "sdgs")
-                //.and(filter("participants")
-                //    .as("participant")
-                //    .by(valueOf("participant.u_id").equalToValue(userId))
-                //    ).as("participants")
-                .and("participants")
-                    .size()
-                    .as("nParticipants");
-        SortOperation sortStage = Aggregation.sort(Sort.Direction.DESC, "lastModified");
-
-        TypedAggregation<Symbiocreation> aggregation = Aggregation.newAggregation(
-                Symbiocreation.class,
-                matchStage,
-                projectStage,
-                sortStage
-        );
-
-        return this.rxMongoTemplate.aggregate(aggregation, Symbiocreation.class);
-    }
 
     @Override
     public Flux<Document> groupAndCountByDate() {
@@ -67,6 +38,6 @@ public class SymbiocreationRepositoryImpl implements SymbiocreationRepositoryCus
                 projectionOperation3
         );
 
-        return this.rxMongoTemplate.aggregate(aggregation, "symbiocreation", Document.class);
+        return this.rxMongoTemplate.aggregate(aggregation, "user", Document.class);
     }
 }

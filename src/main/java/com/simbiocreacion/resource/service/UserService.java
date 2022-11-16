@@ -2,20 +2,24 @@ package com.simbiocreacion.resource.service;
 
 import com.simbiocreacion.resource.model.User;
 import com.simbiocreacion.resource.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
+import org.bson.Document;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Date;
+
 @Service
+@RequiredArgsConstructor
 public class UserService implements IUserService {
 
-    @Autowired
-    private UserRepository userRepository; // like the JPA EntityManager wrapper w find-get/save/delete/update operations
+    private final UserRepository userRepository; // like the JPA EntityManager wrapper w find-get/save/delete/update operations
 
     @Override
     public Mono<User> create(User e) {
-        return userRepository.save(e); //.subscribe() ??
+        e.setCreationDateTime(new Date());
+        return userRepository.save(e);
     }
 
     @Override
@@ -46,5 +50,15 @@ public class UserService implements IUserService {
     @Override
     public Mono<Void> deleteAll() {
         return userRepository.deleteAll();
+    }
+
+    @Override
+    public Mono<Long> count() {
+        return userRepository.count();
+    }
+
+    @Override
+    public Flux<Document> groupAndCountByDate() {
+        return userRepository.groupAndCountByDate();
     }
 }

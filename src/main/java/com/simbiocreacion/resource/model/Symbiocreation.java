@@ -31,9 +31,11 @@ public class Symbiocreation {
     private List<String> extraUrls;
     private List<String> sdgs;
 
+    private Date creationDateTime;
     private Date lastModified;
     private boolean enabled;
     private String visibility;
+
     private List<Participant> participants;
     private List<Node> graph;
     private Integer nParticipants;

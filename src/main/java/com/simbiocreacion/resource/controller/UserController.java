@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Date;
 import java.util.UUID;
 
 @RestController
@@ -51,9 +52,11 @@ public class UserController {
         Flux<User> saved = Flux.just(
                 new User(
                         UUID.randomUUID().toString(), "First User", "First",
-                        "User", "first@user.com", "", false, Role.USER.toString()),
+                        "User", "first@user.com", "", false, Role.USER.toString(),
+                        new Date()),
                 new User(UUID.randomUUID().toString(), "Second User", "Second",
-                        "User", "second@user.com", "", false, Role.USER.toString())
+                        "User", "second@user.com", "", false, Role.USER.toString(),
+                        new Date())
         ).flatMap(userService::create);
 
         userService.deleteAll()

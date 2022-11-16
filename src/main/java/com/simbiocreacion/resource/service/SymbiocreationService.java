@@ -12,7 +12,7 @@ import com.simbiocreacion.resource.repository.SymbiocreationRepository;
 import com.simbiocreacion.resource.util.ByteArrayInOutStream;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.bson.Document;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -32,8 +32,7 @@ public class SymbiocreationService implements ISymbiocreationService {
 
     private final IUserService userService;
 
-    @Autowired
-    private SymbiocreationRepository symbioRepository; // like the JPA EntityManager wrapper w find-get/save/delete/update operations
+    private final SymbiocreationRepository symbioRepository; // like the JPA EntityManager wrapper w find-get/save/delete/update operations
 
     @Override
     public Mono<Symbiocreation> create(Symbiocreation e) {
@@ -90,20 +89,67 @@ public class SymbiocreationService implements ISymbiocreationService {
         return symbioRepository.deleteAll();
     }
 
+    @Override
+    public Mono<Long> count() {
+        return symbioRepository.count();
+    }
+
+    @Override
     public Mono<Long> countByVisibility(String visibility) {
         return symbioRepository.countByVisibility(visibility);
     }
 
+    @Override
     public Mono<Long> countByVisibilityAndDateTimeLessThanEqual(String visibility, Date dateTime) {
         return symbioRepository.countByVisibilityAndDateTimeLessThanEqual(visibility, dateTime);
     }
 
+    @Override
     public Mono<Long> countByVisibilityAndDateTimeGreaterThanEqual(String visibility, Date dateTime) {
         return symbioRepository.countByVisibilityAndDateTimeGreaterThanEqual(visibility, dateTime);
     }
 
+    @Override
     public Mono<Long> countByUser(String userId) {
         return symbioRepository.countByParticipantsU_id(userId);
+    }
+
+    @Override
+    public Flux<Document> groupAndCountByDate() {
+        return symbioRepository.groupAndCountByDate();
+    }
+
+    @Override
+    public Mono<Long> countIdeasAll() {
+
+        return symbioRepository.findAll()
+                .parallel()
+                .map(this::countIdeasInSymbiocreation)
+                .reduce(Long::sum);
+    }
+
+    private Long countIdeasInSymbiocreation(Symbiocreation symbiocreation) {
+
+        return symbiocreation.getGraph().stream()
+                .parallel()
+                .mapToLong(this::countIdeasInTree)
+                .sum();
+    }
+
+    private Long countIdeasInTree(Node node) {
+        long count = 0;
+
+        if (node.getIdea() != null) {
+            count++;
+        }
+
+        if (node.getChildren() != null) {
+            for (Node child : node.getChildren()) {
+                count += countIdeasInTree(child);
+            }
+        }
+
+        return count;
     }
 
     // CSV writer

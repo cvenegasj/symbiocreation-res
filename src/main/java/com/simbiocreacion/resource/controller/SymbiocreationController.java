@@ -2,7 +2,7 @@ package com.simbiocreacion.resource.controller;
 
 import com.simbiocreacion.resource.model.*;
 import com.simbiocreacion.resource.service.ISymbiocreationService;
-import com.simbiocreacion.resource.service.UserService;
+import com.simbiocreacion.resource.service.IUserService;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
@@ -24,12 +24,12 @@ import java.util.stream.Collectors;
 public class SymbiocreationController {
 
     private final ISymbiocreationService symbioService;
-    private final UserService userService;
+    private final IUserService userService;
     //private final Mono<RSocketRequester> requester;
     static final FluxProcessor<Symbiocreation, Symbiocreation> processor = DirectProcessor.<Symbiocreation>create().serialize();
     static final FluxSink sink = processor.sink();
 
-    public SymbiocreationController(ISymbiocreationService symbioService, UserService userService) {
+    public SymbiocreationController(ISymbiocreationService symbioService, IUserService userService) {
         this.symbioService = symbioService;
         this.userService = userService;
         //this.processor = EmitterProcessor.<Symbiocreation>create().serialize();
@@ -39,6 +39,7 @@ public class SymbiocreationController {
     @PostMapping("/symbiocreations")
     public Mono<Symbiocreation> create(@RequestBody Symbiocreation s) {
         s.setLastModified(new Date());
+        s.setCreationDateTime(new Date());
         // set id for creator node
         Node nodeCreator = new Node();
         nodeCreator.setId(UUID.randomUUID().toString());

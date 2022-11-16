@@ -2,7 +2,7 @@ package com.simbiocreacion.resource.service;
 
 import com.simbiocreacion.resource.model.Symbiocreation;
 import com.simbiocreacion.resource.model.User;
-import org.springframework.data.domain.Page;
+import org.bson.Document;
 import org.springframework.data.domain.Pageable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -18,8 +18,6 @@ public interface ISymbiocreationService {
     Mono<Symbiocreation> findById(String id);
 
     Flux<Symbiocreation> findAll();
-
-    //Flux<Symbiocreation> findByUserId(String userId);
 
     Flux<Symbiocreation> findByUserId(String userId);
 
@@ -37,6 +35,8 @@ public interface ISymbiocreationService {
 
     Mono<Void> deleteAll();
 
+    Mono<Long> count();
+
     Mono<Long> countByVisibility(String visibility);
 
     Mono<Long> countByVisibilityAndDateTimeLessThanEqual(String visibility, Date dateTime);
@@ -48,4 +48,8 @@ public interface ISymbiocreationService {
     Mono<ByteArrayInputStream> generateParticipantsDataCsv(List<User> users);
 
     Mono<ByteArrayInputStream> generateAllDataCsv(Symbiocreation symbiocreation);
+
+    Flux<Document> groupAndCountByDate();
+
+    Mono<Long> countIdeasAll();
 }

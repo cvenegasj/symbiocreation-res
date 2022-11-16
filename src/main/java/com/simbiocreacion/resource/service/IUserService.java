@@ -1,6 +1,7 @@
 package com.simbiocreacion.resource.service;
 
 import com.simbiocreacion.resource.model.User;
+import org.bson.Document;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -19,4 +20,8 @@ public interface IUserService {
     Mono<Void> delete(String id);
 
     Mono<Void> deleteAll();
+
+    Mono<Long> count();
+
+    Flux<Document> groupAndCountByDate();
 }
