@@ -49,28 +49,6 @@ public class AnalyticsController {
                     }
                     return document;
                 });
-
-//                .map(document -> document.getString("_id") != null ?
-//                        Map.entry(document.getString("_id"), document.getInteger("count")) :
-//                        Map.entry("2022-11-10", document.getInteger("count")))
-////                .sort((entry1, entry2) -> {
-////                    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-////                    Date date1 = null;
-////                    Date date2 = null;
-////
-////                    if (entry1.getKey().equals("null") || entry2.getKey().equals("null")) return 0;
-////
-////                    try {
-////                        date1 = sdf.parse(entry1.getKey());
-////                        date2 = sdf.parse(entry2.getKey());
-////                    } catch (ParseException e) {
-////                        e.printStackTrace();
-////                        //throw new RuntimeException(e);
-////                    }
-////
-////                    return date1.compareTo(date2);
-////                })
-//                .collectMap(Map.Entry::getKey, Map.Entry::getValue);
     }
 
     @GetMapping("/analytics/user-counts-daily-chart")
@@ -88,5 +66,23 @@ public class AnalyticsController {
 //                        Map.entry(document.getString("_id"), document.getInteger("count")) :
 //                        Map.entry("2022-11-10", document.getInteger("count")))
 //                .collectMap(Map.Entry::getKey, Map.Entry::getValue);
+    }
+
+    @GetMapping("/analytics/trending-topics")
+    public Flux<Document> getTrendingTopics() {
+
+        return Flux.empty();
+    }
+
+    @GetMapping("/analytics/top-symbiocreations")
+    public Flux<Document> getTopSymbiocreations() {
+
+        return symbiocreationService.getTopSymbiocreations();
+    }
+
+    @GetMapping("/analytics/top-users")
+    public Flux<Document> getTopUsers() {
+
+        return userService.getTopUsers();
     }
 }

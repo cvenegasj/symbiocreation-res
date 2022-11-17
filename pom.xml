@@ -11,9 +11,9 @@
 
 	<groupId>com.simbiocreacion</groupId>
 	<artifactId>symbiocreation-res</artifactId>
-	<version>1.5.3</version>
+	<version>1.6.0</version>
 	<name>symbiocreation-res</name>
-	<description>Demo project for Spring Boot</description>
+	<description>Symbiocreation Resource Service</description>
 
 	<properties>
 		<java.version>11</java.version>

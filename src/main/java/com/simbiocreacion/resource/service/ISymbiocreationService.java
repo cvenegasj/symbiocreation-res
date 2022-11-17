@@ -52,4 +52,6 @@ public interface ISymbiocreationService {
     Flux<Document> groupAndCountByDate();
 
     Mono<Long> countIdeasAll();
+
+    Flux<Document> getTopSymbiocreations();
 }

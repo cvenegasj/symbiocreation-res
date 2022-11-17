@@ -19,16 +19,11 @@ public class SymbiocreationRepositoryImpl implements SymbiocreationRepositoryCus
         //LookupOperation lookup = Aggregation.lookup("user", "participants.user", "_id", "");
 
         MatchOperation matchStage = Aggregation.match(new Criteria("participants.u_id").is(userId));
-        ProjectionOperation projectStage = Aggregation.project("name", "participants", "lastModified", "enabled", "visibility",
+        ProjectionOperation projectStage = Aggregation.project(
+                "name", "participants", "lastModified", "enabled", "visibility",
                     "place", "dateTime", "timeZone", "hasStartTime", "description",
                     "infoUrl", "tags", "extraUrls", "sdgs")
-                //.and(filter("participants")
-                //    .as("participant")
-                //    .by(valueOf("participant.u_id").equalToValue(userId))
-                //    ).as("participants")
-                .and("participants")
-                    .size()
-                    .as("nParticipants");
+                .and("participants").size().as("nParticipants");
         SortOperation sortStage = Aggregation.sort(Sort.Direction.DESC, "lastModified");
 
         TypedAggregation<Symbiocreation> aggregation = Aggregation.newAggregation(

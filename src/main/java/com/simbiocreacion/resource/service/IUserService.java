@@ -24,4 +24,6 @@ public interface IUserService {
     Mono<Long> count();
 
     Flux<Document> groupAndCountByDate();
+
+    Flux<Document> getTopUsers();
 }

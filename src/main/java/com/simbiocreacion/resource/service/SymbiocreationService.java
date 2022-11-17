@@ -9,6 +9,7 @@ import com.simbiocreacion.resource.model.Node;
 import com.simbiocreacion.resource.model.Symbiocreation;
 import com.simbiocreacion.resource.model.User;
 import com.simbiocreacion.resource.repository.SymbiocreationRepository;
+import com.simbiocreacion.resource.repository.UserRepository;
 import com.simbiocreacion.resource.util.ByteArrayInOutStream;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -30,7 +31,7 @@ import java.util.stream.Collectors;
 @Log4j2
 public class SymbiocreationService implements ISymbiocreationService {
 
-    private final IUserService userService;
+    private final UserRepository userRepository;
 
     private final SymbiocreationRepository symbioRepository; // like the JPA EntityManager wrapper w find-get/save/delete/update operations
 
@@ -128,6 +129,27 @@ public class SymbiocreationService implements ISymbiocreationService {
                 .reduce(Long::sum);
     }
 
+    @Override
+    public Flux<Document> getTopSymbiocreations() {
+
+        return symbioRepository.findAll()
+                .filter(s -> s.getVisibility().equals("public")) // only public symbios
+                .map(s -> {
+                    Document document = new Document();
+                    document.put("relevanceMetric", this.computeRelevanceMetric(s));
+
+                    s.setGraph(null);
+                    document.put("symbiocreation", s);
+
+                    return document;
+                })
+                .sort((d1, d2) -> d2.getInteger("relevanceMetric") - d1.getInteger("relevanceMetric")) // DESC order
+                .take(10); // top 10
+    }
+
+
+    // ======================== Helper Methods ========================
+
     private Long countIdeasInSymbiocreation(Symbiocreation symbiocreation) {
 
         return symbiocreation.getGraph().stream()
@@ -150,6 +172,31 @@ public class SymbiocreationService implements ISymbiocreationService {
         }
 
         return count;
+    }
+
+    // Computes metric for ranking symbiocreations
+    private int computeRelevanceMetric(Symbiocreation symbiocreation) {
+        final int coefLeaves = 4;
+        final int coefGroups = 2;
+        final int coefLevels = 1;
+
+        final int leaves = symbiocreation.getParticipants().size();
+        log.debug("leaves: {}", leaves);
+
+        final int groups = symbiocreation.getGraph().stream()
+                .parallel()
+                .mapToInt(this::countGroupsOf)
+                .sum();
+        log.debug("groups: {}", groups);
+
+        final int levels = symbiocreation.getGraph().stream()
+                .parallel()
+                .mapToInt(this::computeHeightOf)
+                .max()
+                .orElse(1);
+        log.debug("levels: {}", levels);
+
+        return (coefLeaves * leaves) + (coefGroups * groups) + (coefLevels * levels);
     }
 
     // CSV writer
@@ -245,7 +292,7 @@ public class SymbiocreationService implements ISymbiocreationService {
                     writer.writeNext(new String[] {"=============="});
 
                     final List<Set<Node>> levels = computeTreeLevels(root);
-                    final Map<Node, Set<Node>> nodesLeaves = findNodesLeaves(root); // participants of each node
+                    final Map<Node, Set<Node>> nodesLeaves = findLeavesOfAllNodesIn(root); // participants of each node
                     //nodesLeaves.forEach((k, v) -> System.out.println(k.getName() + ": " + v));
 
                     for (int i = levels.size() - 1; i >= 0; i--) {
@@ -256,7 +303,7 @@ public class SymbiocreationService implements ISymbiocreationService {
                         for (Node node : levels.get(i)) {
                             // write node name and idea
                             if (i == levels.size() - 1) { // level with leaves (participants)
-                                node.setUser(userService.findById(node.getU_id()).block()); //TODO user could be null ?
+                                node.setUser(userRepository.findById(node.getU_id()).block()); //TODO user could be null ?
 
                                 String[] line = {
                                         node.getUser().getName(),
@@ -319,7 +366,7 @@ public class SymbiocreationService implements ISymbiocreationService {
                 for (Node node : singles) {
                     if (node.getUser() == null) continue;
 
-                    node.setUser(userService.findById(node.getU_id()).block());
+                    node.setUser(userRepository.findById(node.getU_id()).block());
                     lineData = new String[] {
                             node.getUser().getName(),
                             node.getUser().getEmail(),
@@ -368,14 +415,26 @@ public class SymbiocreationService implements ISymbiocreationService {
         return levels;
     }
 
-    private Map<Node, Set<Node>> findNodesLeaves(Node root) {
+    static Map<Node, Set<Node>> findLeavesOfAllNodesIn(Node node) {
         final Map<Node, Set<Node>> leaves = new HashMap<>();
-        findParticipantsForTreeDFS(root, leaves);
+        findParticipantsForTreeDFS(node, leaves);
 
         return leaves;
     }
 
-    private void findParticipantsForTreeDFS(Node node, Map<Node, Set<Node>> leaves) {
+    static Set<Node> findLeavesOf(Node node, Set<Node> leaves) {
+        if (node.getChildren() == null || node.getChildren().isEmpty()) {
+            leaves.add(node);
+        } else {
+            node.getChildren().forEach(child -> {
+                findLeavesOf(child, leaves);
+            });
+        }
+
+        return leaves;
+    }
+
+    static void findParticipantsForTreeDFS(Node node, Map<Node, Set<Node>> leaves) {
         leaves.put(node, new HashSet<>());
 
         if (node.getChildren() == null) return;
@@ -391,7 +450,7 @@ public class SymbiocreationService implements ISymbiocreationService {
         });
     }
 
-    private Set<Node> findTreeRoots(Symbiocreation symbio) {
+    static Set<Node> findTreeRoots(Symbiocreation symbio) {
         return symbio.getGraph().stream()
                 .filter(node -> node.getChildren() != null && !node.getChildren().isEmpty())
                 .collect(Collectors.toSet());
@@ -401,5 +460,55 @@ public class SymbiocreationService implements ISymbiocreationService {
         return symbio.getGraph().stream()
                 .filter(node -> node.getChildren() == null || node.getChildren().isEmpty())
                 .collect(Collectors.toSet());
+    }
+
+    private int computeHeightOf(Node node) {
+        int maxHeight = 1;
+
+        if (node.getChildren() == null || node.getChildren().isEmpty()) {
+            return 0;
+        } else {
+            for (Node child : node.getChildren()) {
+                maxHeight = Math.max(maxHeight, 1 + computeHeightOf(child));
+            }
+        }
+
+        return maxHeight;
+    }
+
+    static int computeDepthOf(Node node, Node root) {
+        //BFS
+        Queue<Node> queue = new LinkedList<>();
+        queue.add(root);
+        Map<Node, Integer> depthMap = new HashMap<>();
+        depthMap.put(root, 0);
+
+        while (!queue.isEmpty()) {
+            Node curr = queue.remove();
+            if (curr.equals(node)) break;
+
+            if (curr.getChildren() == null || curr.getChildren().isEmpty()) continue;
+
+            curr.getChildren().forEach(child -> {
+                depthMap.put(child, depthMap.get(curr) + 1);
+                queue.add(child);
+            });
+        }
+
+        return depthMap.get(node);
+    }
+
+    private int countGroupsOf(Node node) {
+        int count = 1;
+
+        if (node.getChildren() == null || node.getChildren().isEmpty()) {
+            return 0;
+        } else {
+            for (Node child : node.getChildren()) {
+                count += countGroupsOf(child);
+            }
+        }
+
+        return count;
     }
 }

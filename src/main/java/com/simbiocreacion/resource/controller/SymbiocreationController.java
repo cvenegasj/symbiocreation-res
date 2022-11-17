@@ -71,14 +71,12 @@ public class SymbiocreationController {
                                     );
 
         return Mono.create(callback -> {
-            monoOfMap.subscribe(
-                    map -> {
-                        for (Participant p : s.getParticipants()) {
-                            p.setUser(map.get(p.getU_id()));
-                        }
-                        callback.success(s);
-                    }
-            );
+            monoOfMap.subscribe(map -> {
+                for (Participant p : s.getParticipants()) {
+                    p.setUser(map.get(p.getU_id()));
+                }
+                callback.success(s);
+            });
         });
     }
 

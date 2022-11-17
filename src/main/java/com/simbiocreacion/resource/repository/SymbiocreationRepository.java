@@ -14,6 +14,9 @@ public interface SymbiocreationRepository extends ReactiveMongoRepository<Symbio
     @Query(value = "{'participants.u_id': ?0}", fields = "{'graph': 0}", sort = "{lastModified: -1}") // ineffective to order in backend????
     Flux<Symbiocreation> findAllByUser(String userId, Pageable pageable);
 
+    @Query(value = "{'participants.u_id': ?0}")
+    Flux<Symbiocreation> findAllByUserWithGraphs(String userId);
+
     //@Query(value = "{'visibility': ?0}", fields = "{'graph': 0}", sort = "{lastModified: -1}")
     //Flux<Symbiocreation> findAllByVisibility(String visibility);
 
