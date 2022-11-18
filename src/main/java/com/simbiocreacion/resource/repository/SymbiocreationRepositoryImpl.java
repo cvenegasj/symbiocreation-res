@@ -36,6 +36,8 @@ public class SymbiocreationRepositoryImpl implements SymbiocreationRepositoryCus
         return this.rxMongoTemplate.aggregate(aggregation, Symbiocreation.class);
     }
 
+    // ========= Tailored queries for analytics =========
+
     @Override
     public Flux<Document> groupAndCountByDate() {
         // Parse Date object to string and truncate time part
@@ -63,5 +65,19 @@ public class SymbiocreationRepositoryImpl implements SymbiocreationRepositoryCus
         );
 
         return this.rxMongoTemplate.aggregate(aggregation, "symbiocreation", Document.class);
+    }
+
+    public Flux<Symbiocreation> findByVisibility(String visibility) {
+        MatchOperation matchOperation = Aggregation.match(new Criteria("visibility").is(visibility));
+        ProjectionOperation projectionOperation = Aggregation.project("id", "name", "description", "graph")
+                .and("participants").size().as("nParticipants");
+
+        TypedAggregation<Symbiocreation> aggregation = Aggregation.newAggregation(
+                Symbiocreation.class,
+                matchOperation,
+                projectionOperation
+        );
+
+        return this.rxMongoTemplate.aggregate(aggregation, Symbiocreation.class);
     }
 }

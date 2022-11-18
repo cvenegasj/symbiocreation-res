@@ -9,4 +9,6 @@ public interface SymbiocreationRepositoryCustom {
     Flux<Symbiocreation> findByUserId(String userId);
 
     Flux<Document> groupAndCountByDate();
+
+    Flux<Symbiocreation> findByVisibility(String visibility);
 }

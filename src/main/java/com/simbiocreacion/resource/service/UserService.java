@@ -12,6 +12,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.*;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -74,9 +75,11 @@ public class UserService implements IUserService {
 //                .flatMap(this::computeRelevanceMetric);
 
         return userRepository.findAll()
+                .take(5)
                 .flatMap(this::computeRelevanceMetric)
                 .sort((d1, d2) -> d2.getInteger("relevanceMetric") - d1.getInteger("relevanceMetric")) // DESC order
-                .take(10); // top 10
+//                .take(10)
+                .log(); // top 10
     }
 
     private Mono<Document> computeRelevanceMetric(User user) {
@@ -92,25 +95,31 @@ public class UserService implements IUserService {
                     final Set<Node> roots = SymbiocreationService.findTreeRoots(s);
                     final Map<Node, Node> leafToRootMap = new HashMap<>();
 
-                    return roots.stream()
-                            .parallel()
-                            .flatMap(root ->
-                                    SymbiocreationService.findLeavesOf(root, new HashSet<>()).stream()
-                                            .filter(leaf -> leaf.getU_id() != null &&
-                                                    leaf.getU_id().equals(user.getId()))
-                                            .map(leaf -> {
-                                                leafToRootMap.put(leaf, root);
-                                                return leaf;
-                                            })
-                            )
-                            .mapToInt(leaf -> leaf.getRole() != null && leaf.getRole().equals("ambassador") ?
-                                    coefAmbassadorScore *
-                                            SymbiocreationService.computeDepthOf(leaf, leafToRootMap.get(leaf)) :
-                                    coefSymbiosAsParticipant *
-                                            SymbiocreationService.computeDepthOf(leaf, leafToRootMap.get(leaf)))
+                    return Stream.generate(Math::random)
+                            .limit(5)
+                            .mapToInt(n -> (int)(n * 10))
                             .sum();
+
+//                    return roots.stream()
+//                            .parallel()
+//                            .flatMap(root ->
+//                                    SymbiocreationService.findLeavesOf(root, new HashSet<>()).stream()
+//                                            .filter(leaf -> leaf.getU_id() != null &&
+//                                                    leaf.getU_id().equals(user.getId()))
+//                                            .map(leaf -> {
+//                                                leafToRootMap.put(leaf, root);
+//                                                return leaf;
+//                                            })
+//                            )
+//                            .mapToInt(leaf -> leaf.getRole() != null && leaf.getRole().equals("ambassador") ?
+//                                    coefAmbassadorScore *
+//                                            SymbiocreationService.computeDepthOf(leaf, leafToRootMap.get(leaf)) :
+//                                    coefSymbiosAsParticipant *
+//                                            SymbiocreationService.computeDepthOf(leaf, leafToRootMap.get(leaf)))
+//                            .sum();
                 })
-                .reduce(Integer::sum);
+                .reduce(Integer::sum)
+                .defaultIfEmpty(0);
 //                .log();
 
         return Mono.create(callback ->

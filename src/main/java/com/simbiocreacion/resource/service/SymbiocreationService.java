@@ -132,13 +132,14 @@ public class SymbiocreationService implements ISymbiocreationService {
     @Override
     public Flux<Document> getTopSymbiocreations() {
 
-        return symbioRepository.findAll()
-                .filter(s -> s.getVisibility().equals("public")) // only public symbios
+        return symbioRepository.findByVisibility("public") // only public symbios considered in ranking
                 .map(s -> {
                     Document document = new Document();
                     document.put("relevanceMetric", this.computeRelevanceMetric(s));
 
+                    // remove unnecessary properties passed to frontend
                     s.setGraph(null);
+                    s.setParticipants(null);
                     document.put("symbiocreation", s);
 
                     return document;
@@ -180,7 +181,7 @@ public class SymbiocreationService implements ISymbiocreationService {
         final int coefGroups = 2;
         final int coefLevels = 1;
 
-        final int leaves = symbiocreation.getParticipants().size();
+        final int leaves = symbiocreation.getNParticipants();
         log.debug("leaves: {}", leaves);
 
         final int groups = symbiocreation.getGraph().stream()
