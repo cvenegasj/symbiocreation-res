@@ -1,5 +1,6 @@
 package com.simbiocreacion.resource.service;
 
+import com.simbiocreacion.resource.model.Idea;
 import com.simbiocreacion.resource.model.Symbiocreation;
 import com.simbiocreacion.resource.model.User;
 import org.bson.Document;
@@ -52,6 +53,8 @@ public interface ISymbiocreationService {
     Flux<Document> groupAndCountByDate();
 
     Mono<Long> countIdeasAll();
+
+    Flux<Idea> getIdeasAll();
 
     Flux<Document> getTopSymbiocreations();
 }

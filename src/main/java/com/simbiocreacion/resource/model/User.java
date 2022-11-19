@@ -25,6 +25,7 @@ public class User {
     private Boolean isGridViewOn;
     private String role;
     private Date creationDateTime;
+    private Integer score;
 
     @Override
     public boolean equals(Object o) {

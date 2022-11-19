@@ -44,7 +44,14 @@ public class UserController {
 
     @PutMapping("/users")
     public Mono<User> update(@RequestBody User u) {
-        return userService.update(u);
+
+        return this.userService.recomputeScore(u.getId())
+                .flatMap(userService::update);
+    }
+
+    @PatchMapping("/users/{userId}/recompute-score")
+    public Mono<User> recomputeUserScore(@PathVariable String userId) {
+        return this.userService.recomputeScore(userId);
     }
 
     @GetMapping("/users/init")
@@ -53,10 +60,10 @@ public class UserController {
                 new User(
                         UUID.randomUUID().toString(), "First User", "First",
                         "User", "first@user.com", "", false, Role.USER.toString(),
-                        new Date()),
+                        new Date(), 0),
                 new User(UUID.randomUUID().toString(), "Second User", "Second",
                         "User", "second@user.com", "", false, Role.USER.toString(),
-                        new Date())
+                        new Date(), 0)
         ).flatMap(userService::create);
 
         userService.deleteAll()

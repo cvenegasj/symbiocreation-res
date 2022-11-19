@@ -5,6 +5,7 @@ import com.opencsv.bean.ColumnPositionMappingStrategy;
 import com.opencsv.bean.StatefulBeanToCsv;
 import com.opencsv.bean.StatefulBeanToCsvBuilder;
 import com.opencsv.exceptions.CsvException;
+import com.simbiocreacion.resource.model.Idea;
 import com.simbiocreacion.resource.model.Node;
 import com.simbiocreacion.resource.model.Symbiocreation;
 import com.simbiocreacion.resource.model.User;
@@ -130,6 +131,13 @@ public class SymbiocreationService implements ISymbiocreationService {
     }
 
     @Override
+    public Flux<Idea> getIdeasAll() {
+
+        return symbioRepository.findAll()
+                .flatMapIterable(this::getAllIdeasInSymbiocreation);
+    }
+
+    @Override
     public Flux<Document> getTopSymbiocreations() {
 
         return symbioRepository.findByVisibility("public") // only public symbios considered in ranking
@@ -173,6 +181,26 @@ public class SymbiocreationService implements ISymbiocreationService {
         }
 
         return count;
+    }
+
+    private Set<Idea> getAllIdeasInSymbiocreation(Symbiocreation symbiocreation) {
+
+        return symbiocreation.getGraph().stream()
+                .parallel()
+                .flatMap(node -> this.getAllIdeasInTree(node, new HashSet<>()).stream())
+                .collect(Collectors.toSet());
+    }
+
+    private Set<Idea> getAllIdeasInTree(Node node, Set<Idea> ideas) {
+        if (node.getIdea() != null) {
+            ideas.add(node.getIdea());
+        }
+
+        if (node.getChildren() != null) {
+            node.getChildren().forEach(child -> getAllIdeasInTree(child, ideas));
+        }
+
+        return ideas;
     }
 
     // Computes metric for ranking symbiocreations
