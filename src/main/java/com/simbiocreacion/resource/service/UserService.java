@@ -69,20 +69,23 @@ public class UserService implements IUserService {
     }
 
     @Override
-    public Flux<User> getTopUsers() {
-
+    public Flux<User> getTopUsersAdmin() {
         return userRepository.findTop10ByOrderByScoreDesc();
+    }
+
+    @Override
+    public Flux<User> getTopUsersRankingPublic() {
+        return userRepository.findTop100ByOrderByScoreDesc();
     }
 
     @Override
     public Mono<User> recomputeScore(String userId) {
 
         return userRepository.findById(userId)
-                .flatMap(this::computeRelevanceMetric);
-                //.flatMap(userRepository::save);
+                .flatMap(this::computeScoreGeneral);
     }
 
-    private Mono<User> computeRelevanceMetric(User user) {
+    private Mono<User> computeScoreGeneral(User user) {
         final int coefParticipant = 1;
         final int coefAmbassador = 2;
 
@@ -103,11 +106,11 @@ public class UserService implements IUserService {
                                                 return leaf;
                                             })
                             )
-                            .mapToInt(leaf -> leaf.getRole() != null && leaf.getRole().equals("ambassador") ?
-                                    coefAmbassador *
-                                            SymbiocreationService.computeDepthOf(leaf, leafToRootMap.get(leaf)) :
-                                    coefParticipant *
-                                            SymbiocreationService.computeDepthOf(leaf, leafToRootMap.get(leaf)))
+                            .mapToInt(leaf ->
+                                    leaf.getRole() != null && leaf.getRole().equals("ambassador") ?
+                                    coefAmbassador * SymbiocreationService.computeDepthOf(leaf, leafToRootMap.get(leaf)) :
+                                    coefParticipant * SymbiocreationService.computeDepthOf(leaf, leafToRootMap.get(leaf))
+                            )
                             .sum();
                 })
                 .reduce(Integer::sum)

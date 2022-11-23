@@ -86,8 +86,8 @@ public class SymbiocreationController {
             return Mono.just(n);
         }
 
-        Mono<Map<String, User>> monoOfMap = Flux.just(n.getIdea().getComments())
-                .flatMapIterable(comments -> comments)
+        Mono<Map<String, User>> monoOfMap = Flux.fromStream(n.getIdea().getComments().stream())
+//                .flatMapIterable(comments -> comments)
                 .flatMap(c -> this.userService.findById(c.getU_id()))
                 .collectMap(
                         item -> item.getId(),

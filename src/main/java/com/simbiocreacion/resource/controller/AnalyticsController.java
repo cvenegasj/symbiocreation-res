@@ -1,10 +1,14 @@
 package com.simbiocreacion.resource.controller;
 
 import com.simbiocreacion.resource.model.AnalyticsResult;
+import com.simbiocreacion.resource.model.Node;
+import com.simbiocreacion.resource.model.Symbiocreation;
 import com.simbiocreacion.resource.model.User;
 import com.simbiocreacion.resource.service.IAnalyticsResultService;
 import com.simbiocreacion.resource.service.ISymbiocreationService;
 import com.simbiocreacion.resource.service.IUserService;
+import com.simbiocreacion.resource.service.SymbiocreationService;
+import com.simbiocreacion.resource.util.SpanishLexicalUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
@@ -13,6 +17,7 @@ import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 import org.bson.Document;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -36,10 +41,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @RestController
 @RequiredArgsConstructor
@@ -56,8 +61,18 @@ public class AnalyticsController {
 
     private final AwsBasicCredentials awsBasicCredentials;
 
-    @GetMapping("/analytics/counts-summary")
-    public Mono<Map<String, Long>> getCountsSummary() {
+
+    // =========== Analytics for Public ===========
+
+    @GetMapping("/analytics/ranking-users-public")
+    public Flux<User> getRankingUsersPublic() {
+        return userService.getTopUsersRankingPublic();
+    }
+
+    // =========== Analytics for Admin Dashboard ===========
+
+    @GetMapping("/analytics/counts-summary-admin")
+    public Mono<Map<String, Long>> getCountsSummaryAdmin() {
         final Map<String, Long> counts = new HashMap<>();
 
         return Mono.zip(
@@ -73,7 +88,7 @@ public class AnalyticsController {
         }).defaultIfEmpty(new HashMap<>());
     }
 
-    @GetMapping("/analytics/symbio-counts-daily-chart")
+    @GetMapping("/analytics/symbio-counts-daily-chart-admin")
     public Flux<Document> getSymbioCountsDaily() {
 
         return symbiocreationService.groupAndCountByDate()
@@ -85,7 +100,7 @@ public class AnalyticsController {
                 });
     }
 
-    @GetMapping("/analytics/user-counts-daily-chart")
+    @GetMapping("/analytics/user-counts-daily-chart-admin")
     public Flux<Document> getUserCountsDaily() {
 
         return userService.groupAndCountByDate()
@@ -97,61 +112,211 @@ public class AnalyticsController {
                 });
     }
 
-    @GetMapping("/analytics/trending-topics-ideas")
-    public Flux<Document> getTrendingTopicsIdeas() {
+    @GetMapping("/analytics/trending-topics-ideas-admin")
+    public Flux<Document> getTrendingTopicsIdeasAdmin() {
 
-        return Flux.empty();
+        return this.analyticsResultService.findLastWithNonEmptyResults()
+                .flatMapIterable(analyticsResult -> {
+                    List<Document> documents = new ArrayList<>();
+
+                    analyticsResult.getResultsFileContent().lines()
+                            .filter(line -> !line.startsWith("topic"))
+                            .forEach(line -> {
+                                final String[] values = line.split(",");
+
+                                if (documents.size() == Integer.valueOf(values[0])) {
+                                    Document newDocument = new Document();
+                                    newDocument.put("topic", Integer.valueOf(values[0]));
+                                    newDocument.put("terms", new ArrayList<>());
+//                                    newDocument.put("termCounts", new ArrayList<>());
+
+                                    documents.add(new Document(newDocument));
+                                }
+
+                                Document currentDocument = documents.get(Integer.valueOf(values[0]));
+                                currentDocument.getList("terms", String.class).add(values[1]);
+                            });
+
+                    return documents;
+                })
+                .flatMap(this::completeTermCountsInDocument);
     }
 
-    @GetMapping("/analytics/top-symbiocreations")
-    public Flux<Document> getTopSymbiocreations() {
+    private Mono<Document> completeTermCountsInDocument(Document document) {
+        final List<String> documentTerms = document.getList("terms", String.class);
+
+        final Map<String, Integer> counts = new HashMap<>();
+        counts.put(documentTerms.get(0), 0); // first 4 words of each topic
+        counts.put(documentTerms.get(1), 0);
+        counts.put(documentTerms.get(2), 0);
+        counts.put(documentTerms.get(3), 0);
+
+        return this.symbiocreationService.getIdeasAllVisibilityPublic()
+                .doOnNext(idea -> {
+                    final String ideaTitle = idea.getTitle() != null ?
+                            idea.getTitle().replaceAll("\\R+", " ") : "";
+                    final String ideaDescription = idea.getDescription() != null ?
+                            idea.getDescription().replaceAll("\\R+", " ") : "";
+                    final String ideaLine = String.format("%s - %s\n", ideaTitle, ideaDescription).toLowerCase();
+
+                    for (String word : ideaLine.split("[^\\p{L}]+")) {
+                        if (counts.containsKey(word)) {
+                            counts.put(word, counts.get(word) + 1);
+                        }
+                    }
+                })
+                .doOnComplete(() -> document.put("termCounts", List.of(
+                        counts.get(documentTerms.get(0)),
+                        counts.get(documentTerms.get(1)),
+                        counts.get(documentTerms.get(2)),
+                        counts.get(documentTerms.get(3))
+                    )))
+                .then(Mono.just(document));
+    }
+
+    @GetMapping("/analytics/top-symbiocreations-admin")
+    public Flux<Document> getTopSymbiocreationsAdmin() {
 
         return symbiocreationService.getTopSymbiocreations();
     }
 
-    @GetMapping("/analytics/top-users")
-    public Flux<User> getTopUsers() {
-
-        return userService.getTopUsers();
+    @GetMapping("/analytics/top-users-admin")
+    public Flux<User> getTopUsersAdmin() {
+        return userService.getTopUsersAdmin();
     }
 
-    @GetMapping("/analytics/get-last-ideas-topic-modeling-result-database")
-    public Mono<AnalyticsResult> getLastIdeasTopicModelingResultFromDatabase() {
 
-        return this.analyticsResultService.findLastWithNonEmptyResults();
+    // =========== Analytics for User Dashboard ===========
+
+    @GetMapping("/analytics/counts-summary-user/{userId}")
+    public Mono<Map<String, Long>> getCountsSummaryUser(@PathVariable String userId) {
+        final Map<String, Long> counts = new HashMap<>();
+
+        return Mono.zip(
+                userService.findById(userId), // User's score
+                symbiocreationService.countByUser(userId), // Total symbiocreations
+                symbiocreationService.countIdeasAllOfUser(userId), // Total ideas
+                symbiocreationService.countGroupsAsAmbassadorOfUser(userId)  // Total groups as ambassador
+        ).map(tuple4 -> {
+            counts.put("score", (long) tuple4.getT1().getScore());
+            counts.put("symbiocreations", tuple4.getT2());
+            counts.put("ideas", tuple4.getT3());
+            counts.put("groupsAsAmbassador", tuple4.getT4());
+
+            return counts;
+        }).defaultIfEmpty(new HashMap<>());
     }
 
-    private String extractFileContentFromResponseInputStream(ResponseInputStream responseInputStream) {
-        String fileContent = "";
 
-        try (final TarArchiveInputStream tarInputStream =
-                     new TarArchiveInputStream(
-                             new GzipCompressorInputStream(
-                                     new ByteArrayInputStream(responseInputStream.readAllBytes())))) {
-            TarArchiveEntry currentEntry = tarInputStream.getNextTarEntry();
+    // =========== Analytics for Symbiocreation Dashboard ===========
 
-            // Just pick specific file from .tar file
-            while (!currentEntry.getName().equals("topic-terms.csv")) {
-                currentEntry = tarInputStream.getNextTarEntry();
-            }
+    @GetMapping("/analytics/counts-summary-symbiocreation/{symbiocreationId}")
+    public Mono<Map<String, Long>> getCountsSummarySymbiocreations(@PathVariable String symbiocreationId) {
+        final Map<String, Long> counts = new HashMap<>();
 
-            // Read directly from TarArchiveInputStream
-            BufferedReader br = new BufferedReader(new InputStreamReader(tarInputStream));
-            fileContent = br.lines()
-                    .collect(Collectors.joining("\n"));
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        return Mono.zip(
+                this.symbiocreationService.findById(symbiocreationId), // Symbiocreations's total users
+                this.symbiocreationService.countIdeasAllOfSymbiocreation(symbiocreationId) // Total ideas
+        ).map(tuple2 -> {
+            counts.put("users", (long) tuple2.getT1().getParticipants().size());
+            counts.put("ideas", tuple2.getT2());
 
-        return fileContent;
+            return counts;
+        }).defaultIfEmpty(new HashMap<>());
+    }
+
+    @GetMapping("/analytics/users-ranking-symbiocreation/{symbiocreationId}")
+    public Flux<Document> getUsersRankingSymbiocreation(@PathVariable String symbiocreationId) {
+
+        return this.symbiocreationService.findById(symbiocreationId)
+                .flatMapMany(this::computeUsersRankingOfSymbiocreation);
+    }
+
+    @GetMapping("/analytics/common-terms-symbiocreation/{symbiocreationId}")
+    public Flux<Document> getCommonTermsInSymbiocreation(@PathVariable String symbiocreationId) {
+        final Map<String, String> wordsToAvoid = Stream.of(
+                Arrays.stream(SpanishLexicalUtils.PREPOSITIONS_SPANISH),
+                Arrays.stream(SpanishLexicalUtils.DETERMINANTS_SPANISH),
+                Arrays.stream(SpanishLexicalUtils.PRONOUNS_SPANISH),
+                Arrays.stream(SpanishLexicalUtils.EXTRA_WORDS_SPANISH)
+                )
+                .flatMap(Function.identity())
+                .collect(Collectors.toMap(
+                        (item) -> item,
+                        (item) -> ""
+                ));
+        final Map<String, Integer> counts = new HashMap<>();
+
+        return this.symbiocreationService.getIdeasAllOfSymbiocreation(symbiocreationId)
+                .doOnNext(idea -> {
+                    // count terms in each idea
+                    final String ideaTitle = idea.getTitle() != null ?
+                            idea.getTitle().replaceAll("\\R+", " ") : "";
+                    final String ideaDescription = idea.getDescription() != null ?
+                            idea.getDescription().replaceAll("\\R+", " ") : "";
+                    final String ideaLine = String.format("%s - %s\n", ideaTitle, ideaDescription).toLowerCase();
+
+                    for (String word : ideaLine.split("[^\\p{L}]+")) {
+                        if (!wordsToAvoid.containsKey(word)) {
+                            counts.put(word, counts.getOrDefault(word, 0) + 1);
+                        }
+                    }
+                })
+                .thenMany(Flux.fromStream(counts.entrySet().stream()
+                        .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))))
+                .take(15) // top 15 most used terms
+                .map(entry -> {
+                    Document document = new Document();
+                    document.put("term", entry.getKey());
+                    document.put("count", entry.getValue());
+
+                    return document;
+                });
+    }
+
+    private Flux<Document> computeUsersRankingOfSymbiocreation(Symbiocreation symbiocreation) {
+        final int coefParticipant = 1;
+        final int coefAmbassador = 2;
+
+        final Set<Node> roots = SymbiocreationService.findTreeRoots(symbiocreation);
+        final Map<Node, Node> leafToRootMap = new HashMap<>();
+
+        return Flux.fromStream(symbiocreation.getParticipants().stream())
+                .flatMap(participant -> this.userService.findById(participant.getU_id()))
+                .map(user -> {
+                    // compute score of this user in current symbiocreation
+                    int score = roots.stream()
+                            .parallel()
+                            .flatMap(root ->
+                                    SymbiocreationService.findLeavesOf(root, new HashSet<>()).stream()
+                                            .filter(leaf -> leaf.getU_id() != null && leaf.getU_id().equals(user.getId()))
+                                            .map(leaf -> {
+                                                leafToRootMap.put(leaf, root);
+                                                return leaf;
+                                            })
+                            )
+                            .mapToInt(leaf ->
+                                    leaf.getRole() != null && leaf.getRole().equals("ambassador") ?
+                                            coefAmbassador * SymbiocreationService.computeDepthOf(leaf, leafToRootMap.get(leaf)) :
+                                            coefParticipant * SymbiocreationService.computeDepthOf(leaf, leafToRootMap.get(leaf))
+                            )
+                            .sum();
+
+                    // Create Document with user and score
+                    Document document = new Document();
+                    document.put("user", user);
+                    document.put("score", score);
+
+                    return document;
+                })
+                .sort((document1, document2) -> document2.getInteger("score") - document1.getInteger("score"));
     }
 
 
     // ============ Scheduled tasks for topic modeling ============
 
-    // Run task every 4 days
-//	@Scheduled(fixedRate=345600000, initialDelay=172800000)
-    @Scheduled(fixedRate=345600000, initialDelay=5000)
+    // Run task every 4 days, initial delay 1 hour
+    @Scheduled(fixedRate=345600000, initialDelay=3600000)
     public void scheduleIdeasTopicModelingTask() throws IOException {
         long now = System.currentTimeMillis() / 1000;
         log.info("Executing cron job. Current time: {} seconds", now);
@@ -185,7 +350,7 @@ public class AnalyticsController {
         final Path tempPath = Files.createTempFile("data-ideas", ".tmp");
         final StringBuffer stringBuffer = new StringBuffer();
 
-        return this.symbiocreationService.getIdeasAll()
+        return this.symbiocreationService.getIdeasAllVisibilityPublic()
                 .doOnNext(idea -> {
                     // Format data for AWS Comprehend: one doc per line
                     final String ideaTitle = idea.getTitle() != null ?
@@ -298,5 +463,30 @@ public class AnalyticsController {
 
                     return this.analyticsResultService.update(analyticsResult);
                 });
+    }
+
+    private String extractFileContentFromResponseInputStream(ResponseInputStream responseInputStream) {
+        String fileContent = "";
+
+        try (final TarArchiveInputStream tarInputStream =
+                     new TarArchiveInputStream(
+                             new GzipCompressorInputStream(
+                                     new ByteArrayInputStream(responseInputStream.readAllBytes())))) {
+            TarArchiveEntry currentEntry = tarInputStream.getNextTarEntry();
+
+            // Just pick specific file from .tar file
+            while (!currentEntry.getName().equals("topic-terms.csv")) {
+                currentEntry = tarInputStream.getNextTarEntry();
+            }
+
+            // Read directly from TarArchiveInputStream
+            BufferedReader br = new BufferedReader(new InputStreamReader(tarInputStream));
+            fileContent = br.lines()
+                    .collect(Collectors.joining("\n"));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        return fileContent;
     }
 }

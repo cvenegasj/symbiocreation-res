@@ -44,14 +44,14 @@ public class UserController {
 
     @PutMapping("/users")
     public Mono<User> update(@RequestBody User u) {
-
         return this.userService.recomputeScore(u.getId())
                 .flatMap(userService::update);
     }
 
-    @PatchMapping("/users/{userId}/recompute-score")
-    public Mono<User> recomputeUserScore(@PathVariable String userId) {
-        return this.userService.recomputeScore(userId);
+    @PatchMapping("/users/{userId}/recompute-score-and-update")
+    public Mono<User> recomputeUserScoreAndUpdate(@PathVariable String userId) {
+        return this.userService.recomputeScore(userId)
+                .flatMap(userService::update);
     }
 
     @GetMapping("/users/init")

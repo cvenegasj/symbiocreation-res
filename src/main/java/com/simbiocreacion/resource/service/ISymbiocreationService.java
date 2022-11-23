@@ -20,7 +20,7 @@ public interface ISymbiocreationService {
 
     Flux<Symbiocreation> findAll();
 
-    Flux<Symbiocreation> findByUserId(String userId);
+    Flux<Symbiocreation> findAllByUserId(String userId);
 
     Flux<Symbiocreation> findAllByUser(String userId, Pageable pageable);
 
@@ -54,7 +54,17 @@ public interface ISymbiocreationService {
 
     Mono<Long> countIdeasAll();
 
+    Mono<Long> countIdeasAllOfUser(String userId);
+
+    Mono<Long> countGroupsAsAmbassadorOfUser(String userId);
+
+    Mono<Long> countIdeasAllOfSymbiocreation(String symbiocreationId);
+
     Flux<Idea> getIdeasAll();
+
+    Flux<Idea> getIdeasAllOfSymbiocreation(String symbiocreationId);
+
+    Flux<Idea> getIdeasAllVisibilityPublic();
 
     Flux<Document> getTopSymbiocreations();
 }

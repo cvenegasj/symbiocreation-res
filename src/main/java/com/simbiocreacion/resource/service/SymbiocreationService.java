@@ -52,7 +52,7 @@ public class SymbiocreationService implements ISymbiocreationService {
     }
 
     @Override
-    public Flux<Symbiocreation> findByUserId(String userId) {
+    public Flux<Symbiocreation> findAllByUserId(String userId) {
         return symbioRepository.findByUserId(userId);
     }
 
@@ -131,9 +131,60 @@ public class SymbiocreationService implements ISymbiocreationService {
     }
 
     @Override
+    public Mono<Long> countIdeasAllOfUser(String userId) {
+
+        return symbioRepository.findAllByUserWithGraphs(userId)
+                .flatMapIterable(symbiocreation ->
+                        symbiocreation.getGraph().stream()
+                                .parallel()
+                                .flatMap(root -> this.findLeavesOf(root, new HashSet<>()).stream())
+                                .filter(node -> node.getU_id() != null && node.getU_id().equals(userId))
+                                .collect(Collectors.toSet())
+                )
+                .count();
+    }
+
+    @Override
+    public Mono<Long> countGroupsAsAmbassadorOfUser(String userId) {
+
+        return symbioRepository.findAllByUserWithGraphs(userId)
+                .flatMapIterable(symbiocreation ->
+                        symbiocreation.getGraph().stream()
+                                .parallel()
+                                .flatMap(root -> this.findLeavesOf(root, new HashSet<>()).stream())
+                                .filter(node -> node.getU_id() != null &&
+                                        node.getRole() != null && node.getRole().equals("ambassador"))
+                                .collect(Collectors.toSet())
+                )
+                .count();
+    }
+
+    @Override
+    public Mono<Long> countIdeasAllOfSymbiocreation(String symbiocreationId) {
+
+        return symbioRepository.findById(symbiocreationId)
+                .map(this::countIdeasInSymbiocreation);
+    }
+
+    @Override
     public Flux<Idea> getIdeasAll() {
 
         return symbioRepository.findAll()
+                .flatMapIterable(this::getAllIdeasInSymbiocreation);
+    }
+
+    @Override
+    public Flux<Idea> getIdeasAllOfSymbiocreation(String symbiocreationId) {
+
+        return symbioRepository.findById(symbiocreationId)
+                .flatMapIterable(this::getAllIdeasInSymbiocreation);
+    }
+
+    @Override
+    public Flux<Idea> getIdeasAllVisibilityPublic() {
+
+        return symbioRepository.findAll()
+                .filter(symbiocreation -> symbiocreation.getVisibility().equals("public"))
                 .flatMapIterable(this::getAllIdeasInSymbiocreation);
     }
 
@@ -143,7 +194,7 @@ public class SymbiocreationService implements ISymbiocreationService {
         return symbioRepository.findByVisibility("public") // only public symbios considered in ranking
                 .map(s -> {
                     Document document = new Document();
-                    document.put("relevanceMetric", this.computeRelevanceMetric(s));
+                    document.put("relevanceMetric", this.computeScoreGeneral(s));
 
                     // remove unnecessary properties passed to frontend
                     s.setGraph(null);
@@ -204,7 +255,7 @@ public class SymbiocreationService implements ISymbiocreationService {
     }
 
     // Computes metric for ranking symbiocreations
-    private int computeRelevanceMetric(Symbiocreation symbiocreation) {
+    private int computeScoreGeneral(Symbiocreation symbiocreation) {
         final int coefLeaves = 4;
         final int coefGroups = 2;
         final int coefLevels = 1;
@@ -451,7 +502,7 @@ public class SymbiocreationService implements ISymbiocreationService {
         return leaves;
     }
 
-    static Set<Node> findLeavesOf(Node node, Set<Node> leaves) {
+    public static Set<Node> findLeavesOf(Node node, Set<Node> leaves) {
         if (node.getChildren() == null || node.getChildren().isEmpty()) {
             leaves.add(node);
         } else {
@@ -479,7 +530,7 @@ public class SymbiocreationService implements ISymbiocreationService {
         });
     }
 
-    static Set<Node> findTreeRoots(Symbiocreation symbio) {
+    public static Set<Node> findTreeRoots(Symbiocreation symbio) {
         return symbio.getGraph().stream()
                 .filter(node -> node.getChildren() != null && !node.getChildren().isEmpty())
                 .collect(Collectors.toSet());
@@ -505,7 +556,7 @@ public class SymbiocreationService implements ISymbiocreationService {
         return maxHeight;
     }
 
-    static int computeDepthOf(Node node, Node root) {
+    public static int computeDepthOf(Node node, Node root) {
         //BFS
         Queue<Node> queue = new LinkedList<>();
         queue.add(root);

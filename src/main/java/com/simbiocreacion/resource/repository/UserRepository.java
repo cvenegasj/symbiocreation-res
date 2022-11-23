@@ -9,4 +9,6 @@ public interface UserRepository extends ReactiveMongoRepository<User, String>, U
     Flux<User> findByEmail(String email);
 
     Flux<User> findTop10ByOrderByScoreDesc();
+
+    Flux<User> findTop100ByOrderByScoreDesc();
 }

@@ -25,7 +25,9 @@ public interface IUserService {
 
     Flux<Document> groupAndCountByDate();
 
-    Flux<User> getTopUsers();
+    Flux<User> getTopUsersAdmin();
+
+    Flux<User> getTopUsersRankingPublic();
 
     Mono<User> recomputeScore(String userId);
 }
