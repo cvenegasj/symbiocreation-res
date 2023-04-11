@@ -47,8 +47,10 @@ public class SymbiocreationController {
         Participant p = s.getParticipants().get(0); // s has the participant
         nodeCreator.setU_id(p.getU_id());
 
-        if (p.getUser().getName() != null) nodeCreator.setName(p.getUser().getName());
-        if (p.getUser().getFirstName() != null && p.getUser().getLastName() != null) nodeCreator.setName(p.getUser().getFirstName() + " " + p.getUser().getLastName());
+        if (p.getUser().getName() != null)
+            nodeCreator.setName(p.getUser().getName());
+        if (p.getUser().getFirstName() != null && p.getUser().getLastName() != null)
+            nodeCreator.setName(p.getUser().getFirstName() + " " + p.getUser().getLastName());
 
         s.getGraph().add(nodeCreator);
         return symbioService.create(s);
