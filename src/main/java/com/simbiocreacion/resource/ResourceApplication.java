@@ -1,16 +1,18 @@
 package com.simbiocreacion.resource;
 
-import lombok.RequiredArgsConstructor;
+import com.simbiocreacion.resource.model.Symbiocreation;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import reactor.core.publisher.DirectProcessor;
+import reactor.core.publisher.FluxProcessor;
+import reactor.core.publisher.Sinks;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 
 @SpringBootApplication
 @EnableScheduling
-@RequiredArgsConstructor
 public class ResourceApplication {
 
 	@Value("${aws.accessKeyId}")
@@ -21,6 +23,17 @@ public class ResourceApplication {
 
 	public static void main(String[] args) {
 		SpringApplication.run(ResourceApplication.class, args);
+	}
+
+	@Bean
+	public FluxProcessor symbioProcessor() {
+		final FluxProcessor<Symbiocreation, Symbiocreation> processor = DirectProcessor.<Symbiocreation>create().serialize();
+		return processor;
+	}
+
+	@Bean
+	public Sinks.Many oneDotSink() {
+		return Sinks.many().multicast().onBackpressureBuffer();
 	}
 
 	@Bean

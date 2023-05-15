@@ -13,27 +13,29 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import reactor.core.publisher.*;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxProcessor;
+import reactor.core.publisher.FluxSink;
+import reactor.core.publisher.Mono;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
-//@RequiredArgsConstructor
 @Log4j2
 public class SymbiocreationController {
 
     private final ISymbiocreationService symbioService;
     private final IUserService userService;
-    //private final Mono<RSocketRequester> requester;
-    static final FluxProcessor<Symbiocreation, Symbiocreation> processor = DirectProcessor.<Symbiocreation>create().serialize();
-    static final FluxSink sink = processor.sink();
+    private final FluxProcessor<Symbiocreation, Symbiocreation> symbioProcessor;
+    private final FluxSink symbioSink;
 
-    public SymbiocreationController(ISymbiocreationService symbioService, IUserService userService) {
+    public SymbiocreationController(ISymbiocreationService symbioService, IUserService userService,
+                                    FluxProcessor<Symbiocreation, Symbiocreation> symbioProcessor) {
         this.symbioService = symbioService;
         this.userService = userService;
-        //this.processor = EmitterProcessor.<Symbiocreation>create().serialize();
-        //this.sink = this.processor.sink();
+        this.symbioProcessor = symbioProcessor;
+        this.symbioSink = this.symbioProcessor.sink();
     }
 
     @PostMapping("/symbiocreations")
@@ -272,7 +274,7 @@ public class SymbiocreationController {
                     return this.symbioService.update(s);
                 })
                 .flatMap(this::completeUsers)
-                .doOnNext(this.sink::next)
+                .doOnNext(symbioSink::next)
                 .thenReturn(newNode);
     }
 
@@ -307,7 +309,7 @@ public class SymbiocreationController {
                 })
                 .flatMap(this::completeUsers)
                 .flatMap(this::removeIdeas)
-                .doOnNext(this.sink::next);
+                .doOnNext(symbioSink::next);
     }
 
     @PostMapping("/symbiocreations/{id}/createUserNode")
@@ -321,7 +323,7 @@ public class SymbiocreationController {
                 })
                 .flatMap(this::completeUsers)
                 .flatMap(this::removeIdeas)
-                .doOnNext(this.sink::next);
+                .doOnNext(symbioSink::next);
     }
 
     // creates a parent node for node with id childId
@@ -345,7 +347,7 @@ public class SymbiocreationController {
                 })
                 .flatMap(this::completeUsers)
                 .flatMap(this::removeIdeas)
-                .doOnNext(this.sink::next);
+                .doOnNext(symbioSink::next);
     }
 
     @GetMapping("/symbiocreations/{id}/setParentNode/{childId}/{parentId}")
@@ -374,7 +376,7 @@ public class SymbiocreationController {
                 })
                 .flatMap(this::completeUsers)
                 .flatMap(this::removeIdeas)
-                .doOnNext(this.sink::next);
+                .doOnNext(symbioSink::next);
     }
 
     @DeleteMapping("/symbiocreations/{id}/deleteNode/{nodeId}")
@@ -394,7 +396,7 @@ public class SymbiocreationController {
                 })
                 .flatMap(this::completeUsers)
                 .flatMap(this::removeIdeas)
-                .doOnNext(this.sink::next);
+                .doOnNext(symbioSink::next);
     }
 
     @PutMapping("/symbiocreations/{id}/updateNodeName")
@@ -407,7 +409,7 @@ public class SymbiocreationController {
                 })
                 .flatMap(this::completeUsers)
                 .flatMap(this::removeIdeas)
-                .doOnNext(this.sink::next);
+                .doOnNext(symbioSink::next);
     }
 
     // set participant as moderator
@@ -425,7 +427,7 @@ public class SymbiocreationController {
                 })
                 .flatMap(this::completeUsers)
                 .flatMap(this::removeIdeas)
-                .doOnNext(this.sink::next);
+                .doOnNext(symbioSink::next);
     }
 
     // node contains id and new role
@@ -438,7 +440,7 @@ public class SymbiocreationController {
                 })
                 .flatMap(this::completeUsers)
                 .flatMap(this::removeIdeas)
-                .doOnNext(this.sink::next);
+                .doOnNext(symbioSink::next);
     }
 
     // participant has the new value for isModerator
@@ -455,7 +457,7 @@ public class SymbiocreationController {
                 })
                 .flatMap(this::completeUsers)
                 .flatMap(this::removeIdeas)
-                .doOnNext(this.sink::next);
+                .doOnNext(symbioSink::next);
     }
 
     @DeleteMapping("/symbiocreations/{id}/deleteParticipant/{u_id}")
@@ -470,7 +472,7 @@ public class SymbiocreationController {
                 })
                 .flatMap(this::completeUsers)
                 .flatMap(this::removeIdeas)
-                .doOnNext(this.sink::next);
+                .doOnNext(symbioSink::next);
     }
 
     @GetMapping("/symbiocreations/{symbioId}/export-participants-data")
@@ -504,19 +506,6 @@ public class SymbiocreationController {
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_OCTET_STREAM_VALUE)
                 .body(fetchedContent);
     }
-
-
-    /****************** Server-Sent Events **********************/
-
-    @GetMapping(value = "/sse-symbios/{id}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<Symbiocreation> streamUpdatesSymbios(@PathVariable String id) {
-        //return requester.flatMapMany(r -> r.route("listen.symbio").data("5ef8388cae6aab3379ab9007").retrieveFlux(Symbiocreation.class));
-        return this.processor
-                //.map(e -> e);
-                //.share()
-                .filter(s -> s.getId().equals(id));
-    }
-
 
 
     /****************** Graph traversal helpers **********************/

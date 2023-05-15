@@ -11,7 +11,7 @@
 
 	<groupId>com.simbiocreacion</groupId>
 	<artifactId>symbiocreation-res</artifactId>
-	<version>1.7.0</version>
+	<version>1.7.5</version>
 	<name>symbiocreation-res</name>
 	<description>Symbiocreation Resource Service</description>
 
