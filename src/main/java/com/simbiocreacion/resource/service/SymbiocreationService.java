@@ -38,7 +38,7 @@ public class SymbiocreationService implements ISymbiocreationService {
 
     @Override
     public Mono<Symbiocreation> create(Symbiocreation e) {
-        return symbioRepository.save(e); //.subscribe() ??
+        return symbioRepository.save(e);
     }
 
     @Override
@@ -123,7 +123,6 @@ public class SymbiocreationService implements ISymbiocreationService {
 
     @Override
     public Mono<Long> countIdeasAll() {
-
         return symbioRepository.findAll()
                 .parallel()
                 .map(this::countIdeasInSymbiocreation)
@@ -132,7 +131,6 @@ public class SymbiocreationService implements ISymbiocreationService {
 
     @Override
     public Mono<Long> countIdeasAllOfUser(String userId) {
-
         return symbioRepository.findAllByUserWithGraphs(userId)
                 .flatMapIterable(symbiocreation ->
                         symbiocreation.getGraph().stream()
@@ -146,7 +144,6 @@ public class SymbiocreationService implements ISymbiocreationService {
 
     @Override
     public Mono<Long> countGroupsAsAmbassadorOfUser(String userId) {
-
         return symbioRepository.findAllByUserWithGraphs(userId)
                 .flatMapIterable(symbiocreation ->
                         symbiocreation.getGraph().stream()
@@ -161,28 +158,24 @@ public class SymbiocreationService implements ISymbiocreationService {
 
     @Override
     public Mono<Long> countIdeasAllOfSymbiocreation(String symbiocreationId) {
-
         return symbioRepository.findById(symbiocreationId)
                 .map(this::countIdeasInSymbiocreation);
     }
 
     @Override
     public Flux<Idea> getIdeasAll() {
-
         return symbioRepository.findAll()
                 .flatMapIterable(this::getAllIdeasInSymbiocreation);
     }
 
     @Override
     public Flux<Idea> getIdeasAllOfSymbiocreation(String symbiocreationId) {
-
         return symbioRepository.findById(symbiocreationId)
                 .flatMapIterable(this::getAllIdeasInSymbiocreation);
     }
 
     @Override
     public Flux<Idea> getIdeasAllVisibilityPublic() {
-
         return symbioRepository.findAll()
                 .filter(symbiocreation -> symbiocreation.getVisibility().equals("public"))
                 .flatMapIterable(this::getAllIdeasInSymbiocreation);
@@ -190,7 +183,6 @@ public class SymbiocreationService implements ISymbiocreationService {
 
     @Override
     public Flux<Document> getTopSymbiocreations() {
-
         return symbioRepository.findByVisibility("public") // only public symbios considered in ranking
                 .map(s -> {
                     Document document = new Document();
@@ -211,7 +203,6 @@ public class SymbiocreationService implements ISymbiocreationService {
     // ======================== Helper Methods ========================
 
     private Long countIdeasInSymbiocreation(Symbiocreation symbiocreation) {
-
         return symbiocreation.getGraph().stream()
                 .parallel()
                 .mapToLong(this::countIdeasInTree)
@@ -235,7 +226,6 @@ public class SymbiocreationService implements ISymbiocreationService {
     }
 
     private Set<Idea> getAllIdeasInSymbiocreation(Symbiocreation symbiocreation) {
-
         return symbiocreation.getGraph().stream()
                 .parallel()
                 .flatMap(node -> this.getAllIdeasInTree(node, new HashSet<>()).stream())

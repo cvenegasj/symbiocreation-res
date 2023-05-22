@@ -1,5 +1,6 @@
 package com.simbiocreacion.resource;
 
+import com.simbiocreacion.resource.model.OneDot;
 import com.simbiocreacion.resource.model.Symbiocreation;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
@@ -8,7 +9,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import reactor.core.publisher.DirectProcessor;
 import reactor.core.publisher.FluxProcessor;
-import reactor.core.publisher.Sinks;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 
 @SpringBootApplication
@@ -31,9 +31,16 @@ public class ResourceApplication {
 		return processor;
 	}
 
+//	@Bean
+//	public Sinks.Many oneDotSink() {
+//		final Sinks.Many<OneDot> sink = Sinks.many().multicast().onBackpressureBuffer();
+//		return sink;
+//	}
+
 	@Bean
-	public Sinks.Many oneDotSink() {
-		return Sinks.many().multicast().onBackpressureBuffer();
+	public FluxProcessor oneDotProcessor() {
+		final FluxProcessor<OneDot, OneDot> processor = DirectProcessor.<OneDot>create().serialize();
+		return processor;
 	}
 
 	@Bean
