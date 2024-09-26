@@ -4,18 +4,13 @@ import com.simbiocreacion.resource.model.AnalyticsResult;
 import com.simbiocreacion.resource.model.Node;
 import com.simbiocreacion.resource.model.Symbiocreation;
 import com.simbiocreacion.resource.model.User;
-import com.simbiocreacion.resource.service.IAnalyticsResultService;
-import com.simbiocreacion.resource.service.ISymbiocreationService;
-import com.simbiocreacion.resource.service.IUserService;
-import com.simbiocreacion.resource.service.SymbiocreationService;
-import com.simbiocreacion.resource.util.SpanishLexicalUtils;
+import com.simbiocreacion.resource.service.*;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 import org.bson.Document;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
@@ -42,21 +37,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.*;
-import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @RestController
 @RequiredArgsConstructor
-@Log4j2
+@Slf4j
 public class AnalyticsController {
 
     private static final String awsAccountId = "206385053618";
 
     private final ISymbiocreationService symbiocreationService;
-
     private final IUserService userService;
-
+    private final ILlmService llmService;
     private final IAnalyticsResultService analyticsResultService;
 
     private final AwsBasicCredentials awsBasicCredentials;
@@ -232,46 +224,11 @@ public class AnalyticsController {
                 .flatMapMany(this::computeUsersRankingOfSymbiocreation);
     }
 
-    @GetMapping("/analytics/common-terms-symbiocreation/{symbiocreationId}")
-    public Flux<Document> getCommonTermsInSymbiocreation(@PathVariable String symbiocreationId) {
-        final Map<String, String> wordsToAvoid = Stream.of(
-                Arrays.stream(SpanishLexicalUtils.PREPOSITIONS_SPANISH),
-                Arrays.stream(SpanishLexicalUtils.DETERMINANTS_SPANISH),
-                Arrays.stream(SpanishLexicalUtils.PRONOUNS_SPANISH),
-                Arrays.stream(SpanishLexicalUtils.EXTRA_WORDS_SPANISH)
-                )
-                .flatMap(Function.identity())
-                .collect(Collectors.toMap(
-                        (item) -> item,
-                        (item) -> ""
-                ));
-        final Map<String, Integer> counts = new HashMap<>();
+    @GetMapping("/analytics/trends-symbiocreation/{symbiocreationId}")
+    public Mono<List<String>> getTrendsInSymbiocreation(@PathVariable String symbiocreationId) {
 
-        return this.symbiocreationService.getIdeasAllOfSymbiocreation(symbiocreationId)
-                .doOnNext(idea -> {
-                    // count terms in each idea
-                    final String ideaTitle = idea.getTitle() != null ?
-                            idea.getTitle().replaceAll("\\R+", " ") : "";
-                    final String ideaDescription = idea.getDescription() != null ?
-                            idea.getDescription().replaceAll("\\R+", " ") : "";
-                    final String ideaLine = String.format("%s - %s\n", ideaTitle, ideaDescription).toLowerCase();
-
-                    for (String word : ideaLine.split("[^\\p{L}]+")) {
-                        if (!wordsToAvoid.containsKey(word)) {
-                            counts.put(word, counts.getOrDefault(word, 0) + 1);
-                        }
-                    }
-                })
-                .thenMany(Flux.fromStream(counts.entrySet().stream()
-                        .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))))
-                .take(15) // top 15 most used terms
-                .map(entry -> {
-                    Document document = new Document();
-                    document.put("term", entry.getKey());
-                    document.put("count", entry.getValue());
-
-                    return document;
-                });
+        return this.symbiocreationService.findById(symbiocreationId)
+                .flatMap(this.llmService::getTrendsForSymbioFromLlm);
     }
 
     private Flux<Document> computeUsersRankingOfSymbiocreation(Symbiocreation symbiocreation) {
@@ -313,10 +270,12 @@ public class AnalyticsController {
     }
 
 
+
+
     // ============ Scheduled tasks for topic modeling ============
 
     // Run task every 4 days, initial delay 1 hour
-    @Scheduled(fixedRate=345600000, initialDelay=3600000)
+//    @Scheduled(fixedRate=345600000, initialDelay=3600000)
     public void scheduleIdeasTopicModelingTask() throws IOException {
         long now = System.currentTimeMillis() / 1000;
         log.info("Executing cron job. Current time: {} seconds", now);
@@ -375,7 +334,7 @@ public class AnalyticsController {
                             .key("input/data-ideas.txt")
                             .build();
                     PutObjectResponse response = s3Client.putObject(putObjectRequest, tempPath);
-                    log.info(response);
+//                    log.info(response);
                 })
                 .then();
     }
@@ -454,7 +413,7 @@ public class AnalyticsController {
                                     analyticsResult.getId()))
                             .build();
                     ResponseInputStream<GetObjectResponse> responseInputStream = s3Client.getObject(getObjectRequest);
-                    log.info(responseInputStream.response());
+//                    log.info(responseInputStream.response());
 
                     final String fileContent = this.extractFileContentFromResponseInputStream(responseInputStream);
 //                    log.debug("File content to be stored: \n {}", fileContent);

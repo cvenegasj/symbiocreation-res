@@ -125,7 +125,7 @@ public class SymbiocreationService implements ISymbiocreationService {
     public Mono<Long> countIdeasAll() {
         return symbioRepository.findAll()
                 .parallel()
-                .map(this::countIdeasInSymbiocreation)
+                .map(SymbiocreationService::countIdeasInSymbiocreation)
                 .reduce(Long::sum);
     }
 
@@ -159,26 +159,26 @@ public class SymbiocreationService implements ISymbiocreationService {
     @Override
     public Mono<Long> countIdeasAllOfSymbiocreation(String symbiocreationId) {
         return symbioRepository.findById(symbiocreationId)
-                .map(this::countIdeasInSymbiocreation);
+                .map(SymbiocreationService::countIdeasInSymbiocreation);
     }
 
     @Override
     public Flux<Idea> getIdeasAll() {
         return symbioRepository.findAll()
-                .flatMapIterable(this::getAllIdeasInSymbiocreation);
+                .flatMapIterable(SymbiocreationService::getAllIdeasInSymbiocreation);
     }
 
     @Override
     public Flux<Idea> getIdeasAllOfSymbiocreation(String symbiocreationId) {
         return symbioRepository.findById(symbiocreationId)
-                .flatMapIterable(this::getAllIdeasInSymbiocreation);
+                .flatMapIterable(SymbiocreationService::getAllIdeasInSymbiocreation);
     }
 
     @Override
     public Flux<Idea> getIdeasAllVisibilityPublic() {
         return symbioRepository.findAll()
                 .filter(symbiocreation -> symbiocreation.getVisibility().equals("public"))
-                .flatMapIterable(this::getAllIdeasInSymbiocreation);
+                .flatMapIterable(SymbiocreationService::getAllIdeasInSymbiocreation);
     }
 
     @Override
@@ -202,14 +202,14 @@ public class SymbiocreationService implements ISymbiocreationService {
 
     // ======================== Helper Methods ========================
 
-    private Long countIdeasInSymbiocreation(Symbiocreation symbiocreation) {
+    static Long countIdeasInSymbiocreation(Symbiocreation symbiocreation) {
         return symbiocreation.getGraph().stream()
                 .parallel()
-                .mapToLong(this::countIdeasInTree)
+                .mapToLong(SymbiocreationService::countIdeasInTree)
                 .sum();
     }
 
-    private Long countIdeasInTree(Node node) {
+    static Long countIdeasInTree(Node node) {
         long count = 0;
 
         if (node.getIdea() != null) {
@@ -225,14 +225,14 @@ public class SymbiocreationService implements ISymbiocreationService {
         return count;
     }
 
-    private Set<Idea> getAllIdeasInSymbiocreation(Symbiocreation symbiocreation) {
+    static Set<Idea> getAllIdeasInSymbiocreation(Symbiocreation symbiocreation) {
         return symbiocreation.getGraph().stream()
                 .parallel()
-                .flatMap(node -> this.getAllIdeasInTree(node, new HashSet<>()).stream())
+                .flatMap(node -> SymbiocreationService.getAllIdeasInTree(node, new HashSet<>()).stream())
                 .collect(Collectors.toSet());
     }
 
-    private Set<Idea> getAllIdeasInTree(Node node, Set<Idea> ideas) {
+    static Set<Idea> getAllIdeasInTree(Node node, Set<Idea> ideas) {
         if (node.getIdea() != null) {
             ideas.add(node.getIdea());
         }
