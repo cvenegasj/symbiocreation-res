@@ -1,11 +1,15 @@
 package com.simbiocreacion.resource.controller;
 
+import com.simbiocreacion.resource.dto.IdeaAiResponse;
+import com.simbiocreacion.resource.dto.IdeaRequest;
 import com.simbiocreacion.resource.model.*;
+import com.simbiocreacion.resource.service.ILlmService;
 import com.simbiocreacion.resource.service.ISymbiocreationService;
 import com.simbiocreacion.resource.service.IUserService;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -18,27 +22,34 @@ import reactor.core.publisher.FluxProcessor;
 import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 
+import java.net.MalformedURLException;
+import java.net.URI;
 import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
-@Log4j2
+@RequestMapping("/symbiocreations")
+@Slf4j
 public class SymbiocreationController {
 
     private final ISymbiocreationService symbioService;
     private final IUserService userService;
+    private final ILlmService llmService;
     private final FluxProcessor<Symbiocreation, Symbiocreation> symbioProcessor;
     private final FluxSink symbioSink;
 
-    public SymbiocreationController(ISymbiocreationService symbioService, IUserService userService,
+    public SymbiocreationController(ISymbiocreationService symbioService,
+                                    IUserService userService,
+                                    ILlmService llmService,
                                     FluxProcessor<Symbiocreation, Symbiocreation> symbioProcessor) {
         this.symbioService = symbioService;
         this.userService = userService;
+        this.llmService = llmService;
         this.symbioProcessor = symbioProcessor;
         this.symbioSink = this.symbioProcessor.sink();
     }
 
-    @PostMapping("/symbiocreations")
+    @PostMapping()
     public Mono<Symbiocreation> create(@RequestBody Symbiocreation s) {
         s.setLastModified(new Date());
         s.setCreationDateTime(new Date());
@@ -60,7 +71,7 @@ public class SymbiocreationController {
         return symbioService.create(s);
     }
 
-    @GetMapping("/symbiocreations/{id}")
+    @GetMapping("/{id}")
     public Mono<Symbiocreation> findById(@PathVariable String id) {
         return symbioService.findById(id)
                 .flatMap(this::completeUsers)
@@ -161,14 +172,14 @@ public class SymbiocreationController {
 
     // TODO: should not receive any param -> get user from session
     // can we get all the users from all symbios in a map, so as to not make repeated user lookups
-    @GetMapping("/symbiocreations/getMine/{userId}/{page}")
+    @GetMapping("/getMine/{userId}/{page}")
     public Flux<Symbiocreation> findByUserId(@PathVariable String userId, @PathVariable int page) {
         Pageable paging = PageRequest.of(page, 12);
         return symbioService.findAllByUser(userId, paging)
                 .flatMap(this::completeUsers); // users needed for displaying participants' names in grid or list view
     }
 
-    @GetMapping("/symbiocreations/getAllPublic/{page}")
+    @GetMapping("/getAllPublic/{page}")
     public Flux<Symbiocreation> findPublicAll(@PathVariable int page) {
         // Pageable sortedByPriceDescNameAsc =
         //  PageRequest.of(0, 5, Sort.by("price").descending().and(Sort.by("name")));
@@ -177,41 +188,41 @@ public class SymbiocreationController {
                 .flatMap(this::completeUsers);
     }
 
-    @GetMapping("/symbiocreations/getUpcomingPublic/{page}")
+    @GetMapping("/getUpcomingPublic/{page}")
     public Flux<Symbiocreation> findPublicUpcoming(@PathVariable int page) {
         Pageable paging = PageRequest.of(page, 20, Sort.by("dateTime").ascending());
         return symbioService.findByVisibilityAndDateTimeGreaterThanEqual("public", new Date(), paging)
                 .flatMap(this::completeUsers);
     }
 
-    @GetMapping("/symbiocreations/getPastPublic/{page}")
+    @GetMapping("/getPastPublic/{page}")
     public Flux<Symbiocreation> findPublicPast(@PathVariable int page) {
         Pageable paging = PageRequest.of(page, 20, Sort.by("dateTime").descending());
         return symbioService.findByVisibilityAndDateTimeLessThanEqual("public", new Date(), paging)
                 .flatMap(this::completeUsers);
     }
 
-    @GetMapping("/symbiocreations/countByUser/{userId}")
+    @GetMapping("/countByUser/{userId}")
     public Mono<Long> countSymbiocreationsByUser(@PathVariable String userId) {
         return symbioService.countByUser(userId);
     }
 
-    @GetMapping("/symbiocreations/countPublic")
+    @GetMapping("/countPublic")
     public Mono<Long> countPublicSymbiocreations() {
         return symbioService.countByVisibility("public");
     }
 
-    @GetMapping("/symbiocreations/countPastPublic")
+    @GetMapping("/countPastPublic")
     public Mono<Long> countPastPublicSymbiocreations() {
         return symbioService.countByVisibilityAndDateTimeLessThanEqual("public", new Date());
     }
 
-    @GetMapping("/symbiocreations/countUpcomingPublic")
+    @GetMapping("/countUpcomingPublic")
     public Mono<Long> countUpcomingPublicSymbiocreations() {
         return symbioService.countByVisibilityAndDateTimeGreaterThanEqual("public", new Date());
     }
 
-    @PutMapping("/symbiocreations/{id}/updateName")
+    @PutMapping("/{id}/updateName")
     public Mono<Void> updateName(@PathVariable String id, @RequestBody Symbiocreation newSymbio) {
         return this.symbioService.findById(id)
                 .flatMap(s -> {
@@ -220,10 +231,9 @@ public class SymbiocreationController {
                     return this.symbioService.update(s);
                 })
                 .then();
-                //.flatMap(s -> Mono.empty());
     }
 
-    @PutMapping("/symbiocreations/{id}/updateInfo")
+    @PutMapping("/{id}/updateInfo")
     public Mono<Void> updateInfo(@PathVariable String id, @RequestBody Symbiocreation newSymbio) {
         return this.symbioService.findById(id)
                 .flatMap(s -> {
@@ -245,16 +255,15 @@ public class SymbiocreationController {
                     return this.symbioService.update(s);
                 })
                 .then();
-                //.flatMap(s -> Mono.empty());
     }
 
-    @DeleteMapping("/symbiocreations/{id}")
+    @DeleteMapping("/{id}")
     public Mono<Void> delete(@PathVariable String id) {
         return this.symbioService.delete(id);
     }
 
     // Operations with nodes
-    @GetMapping("/symbiocreations/{id}/getNode/{nodeId}")
+    @GetMapping("/{id}/getNode/{nodeId}")
     public Mono<Node> findNodeById(@PathVariable String id, @PathVariable String nodeId) {
         return this.symbioService.findById(id)
                 .map(s -> traverseAndGetNode(s.getGraph(), nodeId))
@@ -262,14 +271,14 @@ public class SymbiocreationController {
                 .flatMap(this::completeUsersInComments);
     }
 
-    @GetMapping("/symbiocreations/{id}/getNodesByUserId/{userId}")
+    @GetMapping("/{id}/getNodesByUserId/{userId}")
     public Flux<Node> findNodesByUserId(@PathVariable String id, @PathVariable String userId) {
         return this.symbioService.findById(id)
                 .map(s -> traverseAndGetNodesByUserId(s.getGraph(), userId))
                 .flatMapMany(Flux::fromIterable);
     }
 
-    @PutMapping("/symbiocreations/{id}/updateNodeIdea")
+    @PutMapping("/{id}/updateNodeIdea")
     public Mono<Node> updateNodeIdea(@PathVariable String id, @RequestBody Node newNode) {
         return this.symbioService.findById(id)
                 .flatMap(s -> {
@@ -282,7 +291,56 @@ public class SymbiocreationController {
                 .thenReturn(newNode);
     }
 
-    @PutMapping("/symbiocreations/{id}/createCommentOfIdea/{nodeId}")
+    @GetMapping("/{id}/getIdeasFromAI")
+    public Mono<List<IdeaAiResponse>> getIdeasFromAI(@PathVariable String id) {
+        return this.symbioService.findById(id)
+                .flatMap(this.llmService::getIdeasForSymbioFromLlm);
+    }
+
+    @GetMapping("/{id}/getIdeasFromAI/{nodeId}")
+    public Mono<List<IdeaAiResponse>> getIdeasFromAI(@PathVariable String id, @PathVariable String nodeId) {
+        return this.symbioService.findById(id)
+                .flatMap(symbio ->
+                        Mono.fromSupplier(() -> this.traverseAndGetNode(symbio.getGraph(), nodeId))
+                                .flatMap(node -> this.llmService.getIdeasForGroupFromLlm(symbio, node)));
+    }
+
+    @PostMapping("/getImageFromAI")
+    @ResponseBody
+    public ResponseEntity<Mono<Resource>> getImagesFromAI(@RequestBody IdeaRequest idea) {
+
+        Mono<Resource> resourceMono = this.llmService.getImageFromLlm(idea)
+                .map(image -> {
+                    URI uri = URI.create(image.getUrl());
+                    Resource resource = null;
+                    try {
+                        resource = new UrlResource(uri);
+                    } catch (MalformedURLException e) {
+                        throw new RuntimeException(e);
+                    }
+                    return resource;
+                });
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_PNG)
+                .body(resourceMono);
+    }
+
+    @GetMapping(value = "/getImageFromAi2", produces = MediaType.IMAGE_PNG_VALUE)
+    @ResponseBody
+    public Mono<Resource> getImagesFromAI2() {
+
+        URI uri = URI.create("https://oaidalleapiprodscus.blob.core.windows.net/private/org-ATo7lO6xk7dzzRKpJyZd30Za/symbio-service-account/img-QvGM2632tTrhC2n4MryHvgf8.png?st=2024-09-27T06%3A01%3A13Z&se=2024-09-27T08%3A01%3A13Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=d505667d-d6c1-4a0a-bac7-5c84a87759f8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2024-09-26T23%3A20%3A46Z&ske=2024-09-27T23%3A20%3A46Z&sks=b&skv=2024-08-04&sig=iRK/ygIdf3pfaaO4Q4kCqM4JKtNxhDNrnmKg2RAhoPY%3D");
+        Resource resource = null;
+        try {
+            resource = new UrlResource(uri);
+        } catch (MalformedURLException e) {
+            throw new RuntimeException(e);
+        }
+        return Mono.just(resource);
+    }
+
+    @PutMapping("/{id}/createCommentOfIdea/{nodeId}")
     public Mono<Comment> createCommentOfIdea(@PathVariable String id, @PathVariable String nodeId, @RequestBody Comment comment) {
         return this.symbioService.findById(id)
                 .flatMap(s -> {
@@ -293,7 +351,7 @@ public class SymbiocreationController {
                 .flatMap(s -> this.completeUser(comment));
     }
 
-    @PostMapping("/symbiocreations/{id}/createParticipant")
+    @PostMapping("/{id}/createParticipant")
     public Mono<Symbiocreation> createParticipant(@PathVariable String id, @RequestBody Participant p) {
         return this.symbioService.findById(id)
                 .flatMap(s -> {
@@ -316,7 +374,7 @@ public class SymbiocreationController {
                 .doOnNext(symbioSink::next);
     }
 
-    @PostMapping("/symbiocreations/{id}/createUserNode")
+    @PostMapping("/{id}/createUserNode")
     public Mono<Symbiocreation> createUserNode(@PathVariable String id, @RequestBody Node n) {
         return this.symbioService.findById(id)
                 .flatMap(s -> {
@@ -331,7 +389,7 @@ public class SymbiocreationController {
     }
 
     // creates a parent node for node with id childId
-    @PostMapping("/symbiocreations/{id}/createNextLevelGroup/{childId}")
+    @PostMapping("/{id}/createNextLevelGroup/{childId}")
     public Mono<Symbiocreation> createNextLevelGroup(@PathVariable String id, @PathVariable String childId, @RequestBody Node nextLevelNode) {
         return this.symbioService.findById(id)
                 .flatMap(s -> {
@@ -354,7 +412,7 @@ public class SymbiocreationController {
                 .doOnNext(symbioSink::next);
     }
 
-    @GetMapping("/symbiocreations/{id}/setParentNode/{childId}/{parentId}")
+    @GetMapping("/{id}/setParentNode/{childId}/{parentId}")
     public Mono<Symbiocreation> setParentNode(@PathVariable String id, @PathVariable String childId, @PathVariable String parentId) {
         return this.symbioService.findById(id)
                 .flatMap(s -> {
@@ -383,7 +441,7 @@ public class SymbiocreationController {
                 .doOnNext(symbioSink::next);
     }
 
-    @DeleteMapping("/symbiocreations/{id}/deleteNode/{nodeId}")
+    @DeleteMapping("/{id}/deleteNode/{nodeId}")
     public Mono<Symbiocreation> deleteNode(@PathVariable String id, @PathVariable String nodeId) {
         return this.symbioService.findById(id)
                 .flatMap(s -> {
@@ -403,7 +461,7 @@ public class SymbiocreationController {
                 .doOnNext(symbioSink::next);
     }
 
-    @PutMapping("/symbiocreations/{id}/updateNodeName")
+    @PutMapping("/{id}/updateNodeName")
     public Mono<Symbiocreation> updateNodeName(@PathVariable String id, @RequestBody Node newNode) {
         return this.symbioService.findById(id)
                 .flatMap(s -> {
@@ -417,7 +475,7 @@ public class SymbiocreationController {
     }
 
     // set participant as moderator
-    @PutMapping("/symbiocreations/{id}/setParticipantAsModerator")
+    @PutMapping("/{id}/setParticipantAsModerator")
     public Mono<Symbiocreation> setParticipantAsModerator(@PathVariable String id, @RequestBody Participant participant) {
         return this.symbioService.findById(id)
                 .flatMap(s -> {
@@ -435,7 +493,7 @@ public class SymbiocreationController {
     }
 
     // node contains id and new role
-    @PutMapping("/symbiocreations/{id}/updateUserNodeRole")
+    @PutMapping("/{id}/updateUserNodeRole")
     public Mono<Symbiocreation> updateUserNodeRole(@PathVariable String id, @RequestBody Node node) {
         return this.symbioService.findById(id)
                 .flatMap(s -> {
@@ -448,7 +506,7 @@ public class SymbiocreationController {
     }
 
     // participant has the new value for isModerator
-    @PutMapping("/symbiocreations/{id}/setParticipantIsModerator")
+    @PutMapping("/{id}/setParticipantIsModerator")
     public Mono<Symbiocreation> updateParticipantIsModerator(@PathVariable String id, @RequestBody Participant participant) {
         return this.symbioService.findById(id)
                 .flatMap(s -> {
@@ -464,7 +522,7 @@ public class SymbiocreationController {
                 .doOnNext(symbioSink::next);
     }
 
-    @DeleteMapping("/symbiocreations/{id}/deleteParticipant/{u_id}")
+    @DeleteMapping("/{id}/deleteParticipant/{u_id}")
     public Mono<Symbiocreation> deleteParticipant(@PathVariable String id, @PathVariable String u_id) {
         return this.symbioService.findById(id)
                 .flatMap(s -> {
@@ -479,7 +537,7 @@ public class SymbiocreationController {
                 .doOnNext(symbioSink::next);
     }
 
-    @GetMapping("/symbiocreations/{symbioId}/export-participants-data")
+    @GetMapping("/{symbioId}/export-participants-data")
     @ResponseBody
     public ResponseEntity<Mono<Resource>> downloadParticipantsData(@PathVariable String symbioId) {
         Mono fetchedContent = symbioService.findById(symbioId)
@@ -496,7 +554,7 @@ public class SymbiocreationController {
                 .body(fetchedContent);
     }
 
-    @GetMapping("/symbiocreations/{symbioId}/export-all-data")
+    @GetMapping("/{symbioId}/export-all-data")
     @ResponseBody
     public ResponseEntity<Mono<Resource>> downloadAllData(@PathVariable String symbioId) {
         Mono fetchedContent = symbioService.findById(symbioId)

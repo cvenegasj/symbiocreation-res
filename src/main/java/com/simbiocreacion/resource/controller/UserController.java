@@ -4,7 +4,7 @@ import com.simbiocreacion.resource.model.Role;
 import com.simbiocreacion.resource.model.User;
 import com.simbiocreacion.resource.service.UserService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
@@ -15,7 +15,7 @@ import java.util.UUID;
 
 @RestController
 @RequiredArgsConstructor
-@Log4j2
+@Slf4j
 public class UserController {
 
     private final UserService userService;
@@ -45,7 +45,10 @@ public class UserController {
     @PutMapping("/users")
     public Mono<User> update(@RequestBody User u) {
         return this.userService.recomputeScore(u.getId())
-                .flatMap(userService::update);
+                .flatMap(usrRecomputed -> {
+                    u.setScore(usrRecomputed.getScore());
+                    return userService.update(u);
+                });
     }
 
     @PatchMapping("/users/{userId}/recompute-score-and-update")
@@ -69,7 +72,7 @@ public class UserController {
         userService.deleteAll()
                 .thenMany(saved)
                 .thenMany(userService.findAll())
-                .subscribe(log::info);
+                .subscribe(user -> log.info("{}", user));
 
         // fetch all customers
         /*System.out.println("Users found with findAll():");

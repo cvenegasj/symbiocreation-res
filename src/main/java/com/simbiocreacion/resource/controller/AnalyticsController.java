@@ -1,65 +1,33 @@
 package com.simbiocreacion.resource.controller;
 
-import com.simbiocreacion.resource.model.AnalyticsResult;
 import com.simbiocreacion.resource.model.Node;
 import com.simbiocreacion.resource.model.Symbiocreation;
 import com.simbiocreacion.resource.model.User;
-import com.simbiocreacion.resource.service.IAnalyticsResultService;
-import com.simbiocreacion.resource.service.ISymbiocreationService;
-import com.simbiocreacion.resource.service.IUserService;
-import com.simbiocreacion.resource.service.SymbiocreationService;
-import com.simbiocreacion.resource.util.SpanishLexicalUtils;
+import com.simbiocreacion.resource.service.*;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
-import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
-import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
-import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
+import lombok.extern.slf4j.Slf4j;
 import org.bson.Document;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-import software.amazon.awssdk.core.ResponseInputStream;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.comprehend.ComprehendClient;
-import software.amazon.awssdk.services.comprehend.model.*;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.GetObjectResponse;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 
-import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.time.Duration;
 import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @RestController
 @RequiredArgsConstructor
-@Log4j2
+@Slf4j
 public class AnalyticsController {
 
     private static final String awsAccountId = "206385053618";
 
     private final ISymbiocreationService symbiocreationService;
-
     private final IUserService userService;
-
+    private final ILlmService llmService;
     private final IAnalyticsResultService analyticsResultService;
 
-    private final AwsBasicCredentials awsBasicCredentials;
+//    private final AwsBasicCredentials awsBasicCredentials;
 
 
     // =========== Analytics for Public ===========
@@ -232,46 +200,11 @@ public class AnalyticsController {
                 .flatMapMany(this::computeUsersRankingOfSymbiocreation);
     }
 
-    @GetMapping("/analytics/common-terms-symbiocreation/{symbiocreationId}")
-    public Flux<Document> getCommonTermsInSymbiocreation(@PathVariable String symbiocreationId) {
-        final Map<String, String> wordsToAvoid = Stream.of(
-                Arrays.stream(SpanishLexicalUtils.PREPOSITIONS_SPANISH),
-                Arrays.stream(SpanishLexicalUtils.DETERMINANTS_SPANISH),
-                Arrays.stream(SpanishLexicalUtils.PRONOUNS_SPANISH),
-                Arrays.stream(SpanishLexicalUtils.EXTRA_WORDS_SPANISH)
-                )
-                .flatMap(Function.identity())
-                .collect(Collectors.toMap(
-                        (item) -> item,
-                        (item) -> ""
-                ));
-        final Map<String, Integer> counts = new HashMap<>();
+    @GetMapping("/analytics/trends-symbiocreation/{symbiocreationId}")
+    public Mono<List<String>> getTrendsInSymbiocreation(@PathVariable String symbiocreationId) {
 
-        return this.symbiocreationService.getIdeasAllOfSymbiocreation(symbiocreationId)
-                .doOnNext(idea -> {
-                    // count terms in each idea
-                    final String ideaTitle = idea.getTitle() != null ?
-                            idea.getTitle().replaceAll("\\R+", " ") : "";
-                    final String ideaDescription = idea.getDescription() != null ?
-                            idea.getDescription().replaceAll("\\R+", " ") : "";
-                    final String ideaLine = String.format("%s - %s\n", ideaTitle, ideaDescription).toLowerCase();
-
-                    for (String word : ideaLine.split("[^\\p{L}]+")) {
-                        if (!wordsToAvoid.containsKey(word)) {
-                            counts.put(word, counts.getOrDefault(word, 0) + 1);
-                        }
-                    }
-                })
-                .thenMany(Flux.fromStream(counts.entrySet().stream()
-                        .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))))
-                .take(15) // top 15 most used terms
-                .map(entry -> {
-                    Document document = new Document();
-                    document.put("term", entry.getKey());
-                    document.put("count", entry.getValue());
-
-                    return document;
-                });
+        return this.symbiocreationService.findById(symbiocreationId)
+                .flatMap(this.llmService::getTrendsForSymbioFromLlm);
     }
 
     private Flux<Document> computeUsersRankingOfSymbiocreation(Symbiocreation symbiocreation) {
@@ -313,180 +246,182 @@ public class AnalyticsController {
     }
 
 
+
+
     // ============ Scheduled tasks for topic modeling ============
 
     // Run task every 4 days, initial delay 1 hour
-    @Scheduled(fixedRate=345600000, initialDelay=3600000)
-    public void scheduleIdeasTopicModelingTask() throws IOException {
-        long now = System.currentTimeMillis() / 1000;
-        log.info("Executing cron job. Current time: {} seconds", now);
+//    @Scheduled(fixedRate=345600000, initialDelay=3600000)
+//    public void scheduleIdeasTopicModelingTask() throws IOException {
+//        long now = System.currentTimeMillis() / 1000;
+//        log.info("Executing cron job. Current time: {} seconds", now);
+//
+//        // Analytics pipeline: AWS S3 + Comprehend
+//        this.sendDataForTopicAnalysisS3()
+//                .doOnSuccess(v -> log.info("Done sending data to S3"))
+//                .then(this.triggerTopicModelingJobComprehend())
+//                .doOnSuccess(v -> log.info("Done creating topic modeling job in AWS Comprehend"))
+//                .log()
+//                .subscribe();
+//
+//        this.updateDbWithRemoteResultsOfLastPendingAnalyticsS3()
+//                .doOnSuccess(analyticsResult -> {
+//                    log.info("Done updating database with remote analytics results");
+//                    log.info("Analytics results: {}", analyticsResult);
+//                })
+//                .delaySubscription(Duration.ofHours(1))
+//                .log()
+//                .subscribe();
+//    }
 
-        // Analytics pipeline: AWS S3 + Comprehend
-        this.sendDataForTopicAnalysisS3()
-                .doOnSuccess(v -> log.info("Done sending data to S3"))
-                .then(this.triggerTopicModelingJobComprehend())
-                .doOnSuccess(v -> log.info("Done creating topic modeling job in AWS Comprehend"))
-                .log()
-                .subscribe();
+//    private Mono<Void> sendDataForTopicAnalysisS3() throws IOException {
+//        // AWS SDK to use S3 and Comprehend
+//        S3Client s3Client = S3Client.builder()
+//                .credentialsProvider(StaticCredentialsProvider.create(awsBasicCredentials))
+//                .region(Region.US_EAST_1)
+//                .build();
+//
+//        // Create temporal file to upload
+//        final Path tempPath = Files.createTempFile("data-ideas", ".tmp");
+//        final StringBuffer stringBuffer = new StringBuffer();
+//
+//        return this.symbiocreationService.getIdeasAllVisibilityPublic()
+//                .doOnNext(idea -> {
+//                    // Format data for AWS Comprehend: one doc per line
+//                    final String ideaTitle = idea.getTitle() != null ?
+//                            idea.getTitle().replaceAll("\\R+", " ") : "";
+//                    final String ideaDescription = idea.getDescription() != null ?
+//                            idea.getDescription().replaceAll("\\R+", " ") : "";
+//
+//                    final String ideaLine = String.format("%s - %s\n", ideaTitle, ideaDescription);
+//                    stringBuffer.append(ideaLine);
+//                })
+//                .doOnComplete(() -> {
+//                    try {
+//                        // one-time write
+//                        Files.write(tempPath, stringBuffer.toString().getBytes(StandardCharsets.UTF_8));
+//                        log.info("Temp file created successfully");
+//                    } catch (IOException e) {
+//                        e.printStackTrace();
+//                    }
+//
+//                    PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+//                            .bucket("symbio-comprehend-bucket")
+//                            .key("input/data-ideas.txt")
+//                            .build();
+//                    PutObjectResponse response = s3Client.putObject(putObjectRequest, tempPath);
+////                    log.info(response);
+//                })
+//                .then();
+//    }
 
-        this.updateDbWithRemoteResultsOfLastPendingAnalyticsS3()
-                .doOnSuccess(analyticsResult -> {
-                    log.info("Done updating database with remote analytics results");
-                    log.info("Analytics results: {}", analyticsResult);
-                })
-                .delaySubscription(Duration.ofHours(1))
-                .log()
-                .subscribe();
-    }
+//    private Mono<Void> triggerTopicModelingJobComprehend() {
+//        final ComprehendClient comprehendClient = ComprehendClient.builder()
+//                .credentialsProvider(StaticCredentialsProvider.create(awsBasicCredentials))
+//                .region(Region.US_EAST_1)
+//                .build();
+//
+//        final String inputS3Uri = "s3://symbio-comprehend-bucket/input";
+//        final InputFormat inputDocFormat = InputFormat.ONE_DOC_PER_LINE;
+//        final String outputS3Uri = "s3://symbio-comprehend-bucket/output";
+//        final String dataAccessRoleArn = String.format(
+//                "arn:aws:iam::%s:role/service-role/AmazonComprehendServiceRole-uploader",
+//                awsAccountId);
+//        final int numberOfTopics = 15;
+//
+//        final StartTopicsDetectionJobRequest startTopicsDetectionJobRequest = StartTopicsDetectionJobRequest.builder()
+//                .inputDataConfig(InputDataConfig.builder()
+//                        .s3Uri(inputS3Uri)
+//                        .inputFormat(inputDocFormat)
+//                        .build())
+//                .outputDataConfig(OutputDataConfig.builder()
+//                        .s3Uri(outputS3Uri)
+//                        .build())
+//                .dataAccessRoleArn(dataAccessRoleArn)
+//                .numberOfTopics(numberOfTopics)
+//                .build();
+//
+//        final StartTopicsDetectionJobResponse startTopicsDetectionJobResponse =
+//                comprehendClient.startTopicsDetectionJob(startTopicsDetectionJobRequest);
+//
+//        final String jobId = startTopicsDetectionJobResponse.jobId();
+//        log.info("JobId: {}", jobId);
+//
+//        // Store generated JobId in database for later retrieval
+//        final AnalyticsResult analyticsResult = AnalyticsResult.builder()
+//                .id(jobId)
+//                .analysisName("topic-modeling")
+//                .serviceName("aws-comprehend")
+//                .creationDateTime(new Date())
+//                .resultsFileContent(null)
+//                .build();
+//        this.analyticsResultService.create(analyticsResult).subscribe();
+//        // ==================
+//
+//        final DescribeTopicsDetectionJobRequest describeTopicsDetectionJobRequest =
+//                DescribeTopicsDetectionJobRequest.builder()
+//                        .jobId(jobId)
+//                        .build();
+//        final DescribeTopicsDetectionJobResponse describeTopicsDetectionJobResponse =
+//                comprehendClient.describeTopicsDetectionJob(describeTopicsDetectionJobRequest);
+//        log.info("describeTopicsDetectionJobResponse: {}", describeTopicsDetectionJobResponse);
+//
+//        ListTopicsDetectionJobsResponse listTopicsDetectionJobsResponse =
+//                comprehendClient.listTopicsDetectionJobs(ListTopicsDetectionJobsRequest.builder().build());
+//        log.info("listTopicsDetectionJobsResponse: {}", listTopicsDetectionJobsResponse);
+//
+//        return Mono.empty();
+//    }
 
-    private Mono<Void> sendDataForTopicAnalysisS3() throws IOException {
-        // AWS SDK to use S3 and Comprehend
-        S3Client s3Client = S3Client.builder()
-                .credentialsProvider(StaticCredentialsProvider.create(awsBasicCredentials))
-                .region(Region.US_EAST_1)
-                .build();
+//    private Mono<AnalyticsResult> updateDbWithRemoteResultsOfLastPendingAnalyticsS3() {
+//        final S3Client s3Client = S3Client.builder()
+//                .credentialsProvider(StaticCredentialsProvider.create(awsBasicCredentials))
+//                .region(Region.US_EAST_1)
+//                .build();
+//
+//        return this.analyticsResultService.findLastWithEmptyResults()
+//                .flatMap(analyticsResult -> {
+//                    GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+//                            .bucket("symbio-comprehend-bucket")
+//                            .key(String.format(
+//                                    "output/%s-TOPICS-%s/output/output.tar.gz",
+//                                    awsAccountId,
+//                                    analyticsResult.getId()))
+//                            .build();
+//                    ResponseInputStream<GetObjectResponse> responseInputStream = s3Client.getObject(getObjectRequest);
+////                    log.info(responseInputStream.response());
+//
+//                    final String fileContent = this.extractFileContentFromResponseInputStream(responseInputStream);
+////                    log.debug("File content to be stored: \n {}", fileContent);
+//                    // set results property of analyticsResult
+//                    analyticsResult.setResultsFileContent(fileContent);
+//
+//                    return this.analyticsResultService.update(analyticsResult);
+//                });
+//    }
 
-        // Create temporal file to upload
-        final Path tempPath = Files.createTempFile("data-ideas", ".tmp");
-        final StringBuffer stringBuffer = new StringBuffer();
-
-        return this.symbiocreationService.getIdeasAllVisibilityPublic()
-                .doOnNext(idea -> {
-                    // Format data for AWS Comprehend: one doc per line
-                    final String ideaTitle = idea.getTitle() != null ?
-                            idea.getTitle().replaceAll("\\R+", " ") : "";
-                    final String ideaDescription = idea.getDescription() != null ?
-                            idea.getDescription().replaceAll("\\R+", " ") : "";
-
-                    final String ideaLine = String.format("%s - %s\n", ideaTitle, ideaDescription);
-                    stringBuffer.append(ideaLine);
-                })
-                .doOnComplete(() -> {
-                    try {
-                        // one-time write
-                        Files.write(tempPath, stringBuffer.toString().getBytes(StandardCharsets.UTF_8));
-                        log.info("Temp file created successfully");
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-
-                    PutObjectRequest putObjectRequest = PutObjectRequest.builder()
-                            .bucket("symbio-comprehend-bucket")
-                            .key("input/data-ideas.txt")
-                            .build();
-                    PutObjectResponse response = s3Client.putObject(putObjectRequest, tempPath);
-                    log.info(response);
-                })
-                .then();
-    }
-
-    private Mono<Void> triggerTopicModelingJobComprehend() {
-        final ComprehendClient comprehendClient = ComprehendClient.builder()
-                .credentialsProvider(StaticCredentialsProvider.create(awsBasicCredentials))
-                .region(Region.US_EAST_1)
-                .build();
-
-        final String inputS3Uri = "s3://symbio-comprehend-bucket/input";
-        final InputFormat inputDocFormat = InputFormat.ONE_DOC_PER_LINE;
-        final String outputS3Uri = "s3://symbio-comprehend-bucket/output";
-        final String dataAccessRoleArn = String.format(
-                "arn:aws:iam::%s:role/service-role/AmazonComprehendServiceRole-uploader",
-                awsAccountId);
-        final int numberOfTopics = 15;
-
-        final StartTopicsDetectionJobRequest startTopicsDetectionJobRequest = StartTopicsDetectionJobRequest.builder()
-                .inputDataConfig(InputDataConfig.builder()
-                        .s3Uri(inputS3Uri)
-                        .inputFormat(inputDocFormat)
-                        .build())
-                .outputDataConfig(OutputDataConfig.builder()
-                        .s3Uri(outputS3Uri)
-                        .build())
-                .dataAccessRoleArn(dataAccessRoleArn)
-                .numberOfTopics(numberOfTopics)
-                .build();
-
-        final StartTopicsDetectionJobResponse startTopicsDetectionJobResponse =
-                comprehendClient.startTopicsDetectionJob(startTopicsDetectionJobRequest);
-
-        final String jobId = startTopicsDetectionJobResponse.jobId();
-        log.info("JobId: {}", jobId);
-
-        // Store generated JobId in database for later retrieval
-        final AnalyticsResult analyticsResult = AnalyticsResult.builder()
-                .id(jobId)
-                .analysisName("topic-modeling")
-                .serviceName("aws-comprehend")
-                .creationDateTime(new Date())
-                .resultsFileContent(null)
-                .build();
-        this.analyticsResultService.create(analyticsResult).subscribe();
-        // ==================
-
-        final DescribeTopicsDetectionJobRequest describeTopicsDetectionJobRequest =
-                DescribeTopicsDetectionJobRequest.builder()
-                        .jobId(jobId)
-                        .build();
-        final DescribeTopicsDetectionJobResponse describeTopicsDetectionJobResponse =
-                comprehendClient.describeTopicsDetectionJob(describeTopicsDetectionJobRequest);
-        log.info("describeTopicsDetectionJobResponse: {}", describeTopicsDetectionJobResponse);
-
-        ListTopicsDetectionJobsResponse listTopicsDetectionJobsResponse =
-                comprehendClient.listTopicsDetectionJobs(ListTopicsDetectionJobsRequest.builder().build());
-        log.info("listTopicsDetectionJobsResponse: {}", listTopicsDetectionJobsResponse);
-
-        return Mono.empty();
-    }
-
-    private Mono<AnalyticsResult> updateDbWithRemoteResultsOfLastPendingAnalyticsS3() {
-        final S3Client s3Client = S3Client.builder()
-                .credentialsProvider(StaticCredentialsProvider.create(awsBasicCredentials))
-                .region(Region.US_EAST_1)
-                .build();
-
-        return this.analyticsResultService.findLastWithEmptyResults()
-                .flatMap(analyticsResult -> {
-                    GetObjectRequest getObjectRequest = GetObjectRequest.builder()
-                            .bucket("symbio-comprehend-bucket")
-                            .key(String.format(
-                                    "output/%s-TOPICS-%s/output/output.tar.gz",
-                                    awsAccountId,
-                                    analyticsResult.getId()))
-                            .build();
-                    ResponseInputStream<GetObjectResponse> responseInputStream = s3Client.getObject(getObjectRequest);
-                    log.info(responseInputStream.response());
-
-                    final String fileContent = this.extractFileContentFromResponseInputStream(responseInputStream);
-//                    log.debug("File content to be stored: \n {}", fileContent);
-                    // set results property of analyticsResult
-                    analyticsResult.setResultsFileContent(fileContent);
-
-                    return this.analyticsResultService.update(analyticsResult);
-                });
-    }
-
-    private String extractFileContentFromResponseInputStream(ResponseInputStream responseInputStream) {
-        String fileContent = "";
-
-        try (final TarArchiveInputStream tarInputStream =
-                     new TarArchiveInputStream(
-                             new GzipCompressorInputStream(
-                                     new ByteArrayInputStream(responseInputStream.readAllBytes())))) {
-            TarArchiveEntry currentEntry = tarInputStream.getNextTarEntry();
-
-            // Just pick specific file from .tar file
-            while (!currentEntry.getName().equals("topic-terms.csv")) {
-                currentEntry = tarInputStream.getNextTarEntry();
-            }
-
-            // Read directly from TarArchiveInputStream
-            BufferedReader br = new BufferedReader(new InputStreamReader(tarInputStream));
-            fileContent = br.lines()
-                    .collect(Collectors.joining("\n"));
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-
-        return fileContent;
-    }
+//    private String extractFileContentFromResponseInputStream(ResponseInputStream responseInputStream) {
+//        String fileContent = "";
+//
+//        try (final TarArchiveInputStream tarInputStream =
+//                     new TarArchiveInputStream(
+//                             new GzipCompressorInputStream(
+//                                     new ByteArrayInputStream(responseInputStream.readAllBytes())))) {
+//            TarArchiveEntry currentEntry = tarInputStream.getNextTarEntry();
+//
+//            // Just pick specific file from .tar file
+//            while (!currentEntry.getName().equals("topic-terms.csv")) {
+//                currentEntry = tarInputStream.getNextTarEntry();
+//            }
+//
+//            // Read directly from TarArchiveInputStream
+//            BufferedReader br = new BufferedReader(new InputStreamReader(tarInputStream));
+//            fileContent = br.lines()
+//                    .collect(Collectors.joining("\n"));
+//        } catch (IOException e) {
+//            throw new RuntimeException(e);
+//        }
+//
+//        return fileContent;
+//    }
 }
