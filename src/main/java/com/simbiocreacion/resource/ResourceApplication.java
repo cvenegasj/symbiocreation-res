@@ -2,7 +2,6 @@ package com.simbiocreacion.resource;
 
 import com.simbiocreacion.resource.model.OneDot;
 import com.simbiocreacion.resource.model.Symbiocreation;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -11,21 +10,19 @@ import org.springframework.boot.web.client.ClientHttpRequestFactories;
 import org.springframework.boot.web.client.ClientHttpRequestFactorySettings;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Scope;
-import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.client.RestClient;
 import reactor.core.publisher.DirectProcessor;
 import reactor.core.publisher.FluxProcessor;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 
 @SpringBootApplication
 //@EnableScheduling
 public class ResourceApplication {
 
-	@Value("${aws.accessKeyId}")
-	private String awsAccessKeyId;
-
-	@Value("${aws.secretAccessKey}")
-	private String awsSecretAccessKey;
+//	@Value("${aws.accessKeyId}")
+//	private String awsAccessKeyId;
+//
+//	@Value("${aws.secretAccessKey}")
+//	private String awsSecretAccessKey;
 
 	public static void main(String[] args) {
 		SpringApplication.run(ResourceApplication.class, args);
@@ -49,10 +46,10 @@ public class ResourceApplication {
 		return processor;
 	}
 
-	@Bean
-	public AwsBasicCredentials awsBasicCredentials() {
-		return AwsBasicCredentials.create(this.awsAccessKeyId, this.awsSecretAccessKey);
-	}
+//	@Bean
+//	public AwsBasicCredentials awsBasicCredentials() {
+//		return AwsBasicCredentials.create(this.awsAccessKeyId, this.awsSecretAccessKey);
+//	}
 
 	@Bean
 	@ConditionalOnMissingBean

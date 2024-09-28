@@ -7,9 +7,9 @@ import com.simbiocreacion.resource.service.ILlmService;
 import com.simbiocreacion.resource.service.ISymbiocreationService;
 import com.simbiocreacion.resource.service.IUserService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.image.Image;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -22,6 +22,8 @@ import reactor.core.publisher.FluxProcessor;
 import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 
+import java.net.MalformedURLException;
+import java.net.URI;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -304,8 +306,38 @@ public class SymbiocreationController {
     }
 
     @PostMapping("/getImageFromAI")
-    public Mono<Image> getImagesFromAI(@RequestBody IdeaRequest idea) {
-        return this.llmService.getImageFromLlm(idea);
+    @ResponseBody
+    public ResponseEntity<Mono<Resource>> getImagesFromAI(@RequestBody IdeaRequest idea) {
+
+        Mono<Resource> resourceMono = this.llmService.getImageFromLlm(idea)
+                .map(image -> {
+                    URI uri = URI.create(image.getUrl());
+                    Resource resource = null;
+                    try {
+                        resource = new UrlResource(uri);
+                    } catch (MalformedURLException e) {
+                        throw new RuntimeException(e);
+                    }
+                    return resource;
+                });
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_PNG)
+                .body(resourceMono);
+    }
+
+    @GetMapping(value = "/getImageFromAi2", produces = MediaType.IMAGE_PNG_VALUE)
+    @ResponseBody
+    public Mono<Resource> getImagesFromAI2() {
+
+        URI uri = URI.create("https://oaidalleapiprodscus.blob.core.windows.net/private/org-ATo7lO6xk7dzzRKpJyZd30Za/symbio-service-account/img-QvGM2632tTrhC2n4MryHvgf8.png?st=2024-09-27T06%3A01%3A13Z&se=2024-09-27T08%3A01%3A13Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=d505667d-d6c1-4a0a-bac7-5c84a87759f8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2024-09-26T23%3A20%3A46Z&ske=2024-09-27T23%3A20%3A46Z&sks=b&skv=2024-08-04&sig=iRK/ygIdf3pfaaO4Q4kCqM4JKtNxhDNrnmKg2RAhoPY%3D");
+        Resource resource = null;
+        try {
+            resource = new UrlResource(uri);
+        } catch (MalformedURLException e) {
+            throw new RuntimeException(e);
+        }
+        return Mono.just(resource);
     }
 
     @PutMapping("/{id}/createCommentOfIdea/{nodeId}")
