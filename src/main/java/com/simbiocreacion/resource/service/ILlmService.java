@@ -2,6 +2,7 @@ package com.simbiocreacion.resource.service;
 
 import com.simbiocreacion.resource.dto.IdeaAiResponse;
 import com.simbiocreacion.resource.dto.IdeaRequest;
+import com.simbiocreacion.resource.dto.TrendAiResponse;
 import com.simbiocreacion.resource.model.Node;
 import com.simbiocreacion.resource.model.Symbiocreation;
 import org.springframework.ai.image.Image;
@@ -17,5 +18,5 @@ public interface ILlmService {
 
     Mono<Image> getImageFromLlm(IdeaRequest idea);
 
-    Mono<List<String>> getTrendsForSymbioFromLlm(Symbiocreation symbiocreation);
+    Mono<List<TrendAiResponse>> getTrendsForSymbioFromLlm(Symbiocreation symbiocreation);
 }

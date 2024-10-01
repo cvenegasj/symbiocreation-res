@@ -1,5 +1,6 @@
 package com.simbiocreacion.resource.controller;
 
+import com.simbiocreacion.resource.dto.TrendAiResponse;
 import com.simbiocreacion.resource.model.Node;
 import com.simbiocreacion.resource.model.Symbiocreation;
 import com.simbiocreacion.resource.model.User;
@@ -201,7 +202,7 @@ public class AnalyticsController {
     }
 
     @GetMapping("/analytics/trends-symbiocreation/{symbiocreationId}")
-    public Mono<List<String>> getTrendsInSymbiocreation(@PathVariable String symbiocreationId) {
+    public Mono<List<TrendAiResponse>> getTrendsInSymbiocreation(@PathVariable String symbiocreationId) {
 
         return this.symbiocreationService.findById(symbiocreationId)
                 .flatMap(this.llmService::getTrendsForSymbioFromLlm);
