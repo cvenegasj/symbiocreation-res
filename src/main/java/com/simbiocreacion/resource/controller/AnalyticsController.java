@@ -167,7 +167,8 @@ public class AnalyticsController {
                 symbiocreationService.countIdeasAllOfUser(userId), // Total ideas
                 symbiocreationService.countGroupsAsAmbassadorOfUser(userId)  // Total groups as ambassador
         ).map(tuple4 -> {
-            counts.put("score", (long) tuple4.getT1().getScore());
+            Integer score = tuple4.getT1().getScore();
+            counts.put("score", score != null ? score.longValue() : 0L);
             counts.put("symbiocreations", tuple4.getT2());
             counts.put("ideas", tuple4.getT3());
             counts.put("groupsAsAmbassador", tuple4.getT4());
