@@ -81,6 +81,11 @@ public class LlmService implements ILlmService {
             (Objects.nonNull(idea.getTitle()) && !idea.getTitle().trim().isEmpty())
                     || (Objects.nonNull(idea.getDescription()) && !idea.getDescription().trim().isEmpty());
 
+    // Mensajes de respuesta cuando no hay ideas suficientes
+    private static final String NO_IDEAS_TITLE = "Se necesitan más ideas";
+    private static final String NO_IDEAS_FOR_SYMBIO_MSG = "Para usar esta funcionalidad, los participantes deben agregar al menos una idea a la sesión. Una vez que haya ideas disponibles, la IA podrá generar nuevas sugerencias basadas en ellas.";
+    private static final String NO_IDEAS_FOR_GROUP_MSG = "Para consolidar ideas del grupo, los participantes deben agregar al menos una idea. Una vez que haya ideas disponibles, la IA podrá generar sugerencias consolidadas.";
+
     public LlmService(ChatClient.Builder builder, ImageModel imageModel) {
         this.chatClient = builder.build();
         this.imageModel = imageModel;
@@ -91,11 +96,7 @@ public class LlmService implements ILlmService {
         List<Idea> existingIdeas = getIdeasFromSymbiocreation(symbiocreation, 3);
 
         if (existingIdeas.isEmpty()) {
-            return Mono.just(List.of(new IdeaAiResponse(
-                    "Se necesitan más ideas",
-                    "Para usar esta funcionalidad, los participantes deben agregar al menos una idea a la sesión. " +
-                    "Una vez que haya ideas disponibles, la IA podrá generar nuevas sugerencias basadas en ellas."
-            )));
+            return Mono.just(List.of(new IdeaAiResponse(NO_IDEAS_TITLE, NO_IDEAS_FOR_SYMBIO_MSG)));
         }
 
         return Mono.fromCallable(() -> {
@@ -147,11 +148,7 @@ public class LlmService implements ILlmService {
                 .toList();
 
         if (groupIdeas.isEmpty()) {
-            return Mono.just(List.of(new IdeaAiResponse(
-                    "Se necesitan más ideas",
-                    "Para consolidar ideas del grupo, los participantes deben agregar al menos una idea. " +
-                    "Una vez que haya ideas disponibles, la IA podrá generar sugerencias consolidadas."
-            )));
+            return Mono.just(List.of(new IdeaAiResponse(NO_IDEAS_TITLE, NO_IDEAS_FOR_GROUP_MSG)));
         }
 
         return Mono.fromCallable(() -> {
@@ -269,9 +266,6 @@ public class LlmService implements ILlmService {
         }
         // Remove potential prompt injection patterns
         return input
-                .replace("ignore", "")
-                .replace("Ignore", "")
-                .replace("IGNORE", "")
                 .replaceAll("(?i)ignore\\s+(all\\s+)?(previous|above|prior)\\s+(instructions?|prompts?)", "")
                 .replaceAll("(?i)disregard\\s+(all\\s+)?(previous|above|prior)\\s+(instructions?|prompts?)", "")
                 .replaceAll("(?i)forget\\s+(all\\s+)?(previous|above|prior)\\s+(instructions?|prompts?)", "")
