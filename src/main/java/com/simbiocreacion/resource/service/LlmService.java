@@ -22,7 +22,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
+import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.Collections;
 import java.util.List;
@@ -31,6 +33,7 @@ import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class LlmService implements ILlmService {
 
@@ -78,6 +81,11 @@ public class LlmService implements ILlmService {
             (Objects.nonNull(idea.getTitle()) && !idea.getTitle().trim().isEmpty())
                     || (Objects.nonNull(idea.getDescription()) && !idea.getDescription().trim().isEmpty());
 
+    // Mensajes de respuesta cuando no hay ideas suficientes
+    private static final String NO_IDEAS_TITLE = "Se necesitan más ideas";
+    private static final String NO_IDEAS_FOR_SYMBIO_MSG = "Para usar esta funcionalidad, los participantes deben agregar al menos una idea a la sesión. Una vez que haya ideas disponibles, la IA podrá generar nuevas sugerencias basadas en ellas.";
+    private static final String NO_IDEAS_FOR_GROUP_MSG = "Para consolidar ideas del grupo, los participantes deben agregar al menos una idea. Una vez que haya ideas disponibles, la IA podrá generar sugerencias consolidadas.";
+
     public LlmService(ChatClient.Builder builder, ImageModel imageModel) {
         this.chatClient = builder.build();
         this.imageModel = imageModel;
@@ -85,130 +93,189 @@ public class LlmService implements ILlmService {
 
     @Override
     public Mono<List<IdeaAiResponse>> getIdeasForSymbioFromLlm(Symbiocreation symbiocreation) {
-        PromptTemplate userProblemPromptTemplate = new PromptTemplate(
-                USER_PROBLEM_TEMPLATE_1,
-                Map.of("symbiocreationName", symbiocreation.getName(),
-                        "symbiocreationDescription", Objects.isNull(symbiocreation.getDescription())
-                                ? "" : symbiocreation.getDescription()));
-        Message userProblem = userProblemPromptTemplate.createMessage();
+        List<Idea> existingIdeas = getIdeasFromSymbiocreation(symbiocreation, 3);
 
-        StringBuilder sbUserIdeas = new StringBuilder();
-        sbUserIdeas.append("These are some ideas from participants: \n\n");
+        if (existingIdeas.isEmpty()) {
+            return Mono.just(List.of(new IdeaAiResponse(NO_IDEAS_TITLE, NO_IDEAS_FOR_SYMBIO_MSG)));
+        }
 
-        List<Idea> ideas = getThreeIdeasFromSymbiocreation(symbiocreation);
-        ideas.forEach(idea -> {
-            String ideaStr = String.format(
-                    USER_IDEA_TEMPLATE,
-                    idea.getTitle(),
-                    idea.getDescription());
-            sbUserIdeas.append(ideaStr);
+        return Mono.fromCallable(() -> {
+            PromptTemplate userProblemPromptTemplate = new PromptTemplate(
+                    USER_PROBLEM_TEMPLATE_1,
+                    Map.of("symbiocreationName", sanitizeInput(symbiocreation.getName()),
+                            "symbiocreationDescription", sanitizeInput(symbiocreation.getDescription())));
+            Message userProblem = userProblemPromptTemplate.createMessage();
+
+            StringBuilder sbUserIdeas = new StringBuilder();
+            sbUserIdeas.append("These are some ideas from participants: \n\n");
+
+            existingIdeas.forEach(idea -> {
+                String ideaStr = String.format(
+                        USER_IDEA_TEMPLATE,
+                        Objects.toString(idea.getTitle(), ""),
+                        Objects.toString(idea.getDescription(), ""));
+                sbUserIdeas.append(ideaStr);
+            });
+            Message userIdeas = new UserMessage(sbUserIdeas.toString());
+
+            BeanOutputConverter<List<IdeaAiResponse>> outputConverter = new BeanOutputConverter<>(
+                    new ParameterizedTypeReference<List<IdeaAiResponse>>() { });
+            PromptTemplate userQueryTemplate = new PromptTemplate(
+                    USER_QUERY_TEMPLATE_1,
+                    Map.of("format", outputConverter.getFormat()));
+            Message userQuery = userQueryTemplate.createMessage();
+
+            Prompt prompt = new Prompt(List.of(
+                    new SystemMessage(systemForSymbioIdeas), userProblem, userIdeas, userQuery));
+            String content = chatClient.prompt(prompt).call().content();
+            List<IdeaAiResponse> llmResponse = outputConverter.convert(content);
+
+            return validateResponse(llmResponse);
+        })
+        .subscribeOn(Schedulers.boundedElastic())
+        .onErrorResume(e -> {
+            log.error("Error getting ideas from LLM for symbiocreation: {}", symbiocreation.getId(), e);
+            return Mono.just(Collections.emptyList());
         });
-        Message userIdeas = new UserMessage(sbUserIdeas.toString());
-
-        BeanOutputConverter<List<IdeaAiResponse>> outputConverter = new BeanOutputConverter<>(
-                new ParameterizedTypeReference<List<IdeaAiResponse>>() { });
-        PromptTemplate userQueryTemplate = new PromptTemplate(
-                USER_QUERY_TEMPLATE_1,
-                Map.of("format", outputConverter.getFormat())); // prompt is for role 'user' by default
-        Message userQuery = userQueryTemplate.createMessage();
-
-        Prompt prompt = new Prompt(List.of(
-                new SystemMessage(systemForSymbioIdeas), userProblem, userIdeas, userQuery));
-        List<IdeaAiResponse> llmResponse = outputConverter.convert(chatClient.prompt(prompt).call().content());
-
-        return Mono.just(llmResponse);
     }
 
     @Override
     public Mono<List<IdeaAiResponse>> getIdeasForGroupFromLlm(Symbiocreation symbiocreation, Node group) {
-        PromptTemplate userSessionPromptTemplate = new PromptTemplate(
-                USER_PROBLEM_TEMPLATE_2,
-                Map.of("symbiocreationName", symbiocreation.getName(),
-                        "symbiocreationDescription", Objects.isNull(symbiocreation.getDescription())
-                                ? "" : symbiocreation.getDescription()));
-        Message userSession = userSessionPromptTemplate.createMessage();
-
-        StringBuilder sbUserIdeas = new StringBuilder();
-        sbUserIdeas.append("These are the ideas you need to summarize: \n\n");
-
-        List<Idea> ideas = group.getChildren().stream()
+        List<Idea> groupIdeas = group.getChildren().stream()
                 .map(Node::getIdea)
                 .filter(Objects::nonNull)
                 .filter(TITLE_OR_DESCRIPTION_EXISTS_PREDICATE)
                 .toList();
-        ideas.forEach(idea -> {
-            String ideaStr = String.format(
-                    USER_IDEA_TEMPLATE,
-                    idea.getTitle(),
-                    idea.getDescription());
-            sbUserIdeas.append(ideaStr);
+
+        if (groupIdeas.isEmpty()) {
+            return Mono.just(List.of(new IdeaAiResponse(NO_IDEAS_TITLE, NO_IDEAS_FOR_GROUP_MSG)));
+        }
+
+        return Mono.fromCallable(() -> {
+            PromptTemplate userSessionPromptTemplate = new PromptTemplate(
+                    USER_PROBLEM_TEMPLATE_2,
+                    Map.of("symbiocreationName", sanitizeInput(symbiocreation.getName()),
+                            "symbiocreationDescription", sanitizeInput(symbiocreation.getDescription())));
+            Message userSession = userSessionPromptTemplate.createMessage();
+
+            StringBuilder sbUserIdeas = new StringBuilder();
+            sbUserIdeas.append("These are the ideas you need to summarize: \n\n");
+
+            groupIdeas.forEach(idea -> {
+                String ideaStr = String.format(
+                        USER_IDEA_TEMPLATE,
+                        Objects.toString(idea.getTitle(), ""),
+                        Objects.toString(idea.getDescription(), ""));
+                sbUserIdeas.append(ideaStr);
+            });
+            Message userIdeas = new UserMessage(sbUserIdeas.toString());
+
+            BeanOutputConverter<List<IdeaAiResponse>> outputConverter = new BeanOutputConverter<>(
+                    new ParameterizedTypeReference<List<IdeaAiResponse>>() { });
+            PromptTemplate userQueryTemplate = new PromptTemplate(
+                    USER_QUERY_TEMPLATE_2,
+                    Map.of("format", outputConverter.getFormat()));
+            Message userQuery = userQueryTemplate.createMessage();
+
+            Prompt prompt = new Prompt(List.of(
+                    new SystemMessage(systemForGroupIdeas), userSession, userIdeas, userQuery));
+            String content = chatClient.prompt(prompt).call().content();
+            List<IdeaAiResponse> llmResponse = outputConverter.convert(content);
+
+            return validateResponse(llmResponse);
+        })
+        .subscribeOn(Schedulers.boundedElastic())
+        .onErrorResume(e -> {
+            log.error("Error getting ideas from LLM for group: {} in symbiocreation: {}",
+                    group.getId(), symbiocreation.getId(), e);
+            return Mono.just(Collections.emptyList());
         });
-        Message userIdeas = new UserMessage(sbUserIdeas.toString());
-
-        BeanOutputConverter<List<IdeaAiResponse>> outputConverter = new BeanOutputConverter<>(
-                new ParameterizedTypeReference<List<IdeaAiResponse>>() { });
-        PromptTemplate userQueryTemplate = new PromptTemplate(
-                USER_QUERY_TEMPLATE_2,
-                Map.of("format", outputConverter.getFormat()));
-        Message userQuery = userQueryTemplate.createMessage();
-
-        Prompt prompt = new Prompt(List.of(
-                new SystemMessage(systemForGroupIdeas), userSession, userIdeas, userQuery));
-        List<IdeaAiResponse> llmResponse = outputConverter.convert(chatClient.prompt(prompt).call().content());
-
-        return Mono.just(llmResponse);
     }
 
     @Override
     public Mono<Image> getImageFromLlm(IdeaRequest idea) {
-        String messageContent = idea.title() + "\n" + idea.description();
+        return Mono.fromCallable(() -> {
+            String sanitizedTitle = sanitizeInput(idea.title());
+            String sanitizedDescription = sanitizeInput(idea.description());
+            String messageContent = sanitizedTitle + "\n" + sanitizedDescription;
 
-        ImageMessage imageMessage = new ImageMessage(messageContent);
-        ImagePrompt imagePrompt = new ImagePrompt(imageMessage, OpenAiImageOptions.builder()
-                .withQuality("hd")
-                .withN(1)
-                .withHeight(1024)
-                .withWidth(1024)
-                .build());
-        Image image = imageModel.call(imagePrompt).getResult().getOutput();
-
-        return Mono.just(image);
+            ImageMessage imageMessage = new ImageMessage(messageContent);
+            ImagePrompt imagePrompt = new ImagePrompt(imageMessage, OpenAiImageOptions.builder()
+                    .withQuality("hd")
+                    .withN(1)
+                    .withHeight(1024)
+                    .withWidth(1024)
+                    .build());
+            return imageModel.call(imagePrompt).getResult().getOutput();
+        })
+        .subscribeOn(Schedulers.boundedElastic())
+        .onErrorResume(e -> {
+            log.error("Error generating image from LLM for idea: {}", idea.title(), e);
+            return Mono.empty();
+        });
     }
 
     @Override
     public Mono<List<TrendAiResponse>> getTrendsForSymbioFromLlm(Symbiocreation symbiocreation) {
-        StringBuilder sbIdeas = new StringBuilder();
+        return Mono.fromCallable(() -> {
+            StringBuilder sbIdeas = new StringBuilder();
 
-        List<Idea> ideas = SymbiocreationService.getAllIdeasInSymbiocreation(symbiocreation).stream()
-                .filter(TITLE_OR_DESCRIPTION_EXISTS_PREDICATE)
-                .toList();
-        ideas.forEach(idea -> {
-            String ideaStr = String.format(
-                    USER_IDEA_TEMPLATE,
-                    idea.getTitle(),
-                    idea.getDescription());
-            sbIdeas.append(ideaStr);
+            List<Idea> ideas = SymbiocreationService.getAllIdeasInSymbiocreation(symbiocreation).stream()
+                    .filter(TITLE_OR_DESCRIPTION_EXISTS_PREDICATE)
+                    .toList();
+            ideas.forEach(idea -> {
+                String ideaStr = String.format(
+                        USER_IDEA_TEMPLATE,
+                        Objects.toString(idea.getTitle(), ""),
+                        Objects.toString(idea.getDescription(), ""));
+                sbIdeas.append(ideaStr);
+            });
+
+            BeanOutputConverter<List<TrendAiResponse>> outputConverter = new BeanOutputConverter<>(
+                    new ParameterizedTypeReference<List<TrendAiResponse>>() { });
+            PromptTemplate userTrendsPromptTemplate = new PromptTemplate(
+                    userForSymbioTrends,
+                    Map.of("ideas", sbIdeas,
+                            "format", outputConverter.getFormat()));
+            Message userTrends = userTrendsPromptTemplate.createMessage();
+
+            Prompt prompt = new Prompt(userTrends);
+            String content = chatClient.prompt(prompt).call().content();
+            List<TrendAiResponse> llmResponse = outputConverter.convert(content);
+
+            return validateResponse(llmResponse);
+        })
+        .subscribeOn(Schedulers.boundedElastic())
+        .onErrorResume(e -> {
+            log.error("Error getting trends from LLM for symbiocreation: {}", symbiocreation.getId(), e);
+            return Mono.just(Collections.emptyList());
         });
-
-        BeanOutputConverter<List<TrendAiResponse>> outputConverter = new BeanOutputConverter<>(
-                new ParameterizedTypeReference<List<TrendAiResponse>>() { });
-        PromptTemplate userTrendsPromptTemplate = new PromptTemplate(
-                userForSymbioTrends,
-                Map.of("ideas", sbIdeas,
-                        "format", outputConverter.getFormat()));
-        Message userTrends = userTrendsPromptTemplate.createMessage();
-
-        Prompt prompt = new Prompt(userTrends);
-        List<TrendAiResponse> llmResponse = outputConverter.convert(chatClient.prompt(prompt).call().content());
-
-        return Mono.just(llmResponse);
     }
 
-    private List<Idea> getThreeIdeasFromSymbiocreation(Symbiocreation symbiocreation) {
+    private List<Idea> getIdeasFromSymbiocreation(Symbiocreation symbiocreation, int maxIdeas) {
         List<Idea> ideas = SymbiocreationService.getAllIdeasInSymbiocreation(symbiocreation).stream()
                 .filter(TITLE_OR_DESCRIPTION_EXISTS_PREDICATE)
                 .collect(Collectors.toList());
-        Collections.shuffle(ideas); // random shuffle
-        return ideas.subList(0, 3);
+        Collections.shuffle(ideas);
+        return ideas.subList(0, Math.min(ideas.size(), maxIdeas));
+    }
+
+    private String sanitizeInput(String input) {
+        if (input == null) {
+            return "";
+        }
+        // Remove potential prompt injection patterns
+        return input
+                .replaceAll("(?i)ignore\\s+(all\\s+)?(previous|above|prior)\\s+(instructions?|prompts?)", "")
+                .replaceAll("(?i)disregard\\s+(all\\s+)?(previous|above|prior)\\s+(instructions?|prompts?)", "")
+                .replaceAll("(?i)forget\\s+(all\\s+)?(previous|above|prior)\\s+(instructions?|prompts?)", "")
+                .trim();
+    }
+
+    private <T> List<T> validateResponse(List<T> response) {
+        if (response == null) {
+            return Collections.emptyList();
+        }
+        return response;
     }
 }

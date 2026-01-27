@@ -1,0 +1,11 @@
+# 14/12/25 mramirez
+- **LlmService**: Corregido `IndexOutOfBoundsException` cuando una symbiocreation tiene menos de 3 ideas
+- **LlmService**: Corregido `NullPointerException` en templates cuando `title` o `description` son null
+- **AnalyticsController**: Corregido `NullPointerException` cuando `user.getScore()` es null
+- **LlmService**: Convertidas llamadas bloqueantes a OpenAI a operaciones reactivas con `Mono.fromCallable()` y `Schedulers.boundedElastic()`
+- **LlmService**: Agregado manejo de errores con `onErrorResume()` y logging en todos los metodos de IA
+- **LlmService**: Agregada validacion de respuestas null del LLM
+- **LlmService**: Agregada sanitizacion de inputs para prevenir prompt injection
+- **LlmService**: Mensaje informativo cuando no hay ideas suficientes para generar sugerencias de IA
+- **application.properties**: Configuracion de conexion a MongoDB local
+- **application.properties**: Configuracion de API key de OpenAI
