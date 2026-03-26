@@ -180,24 +180,37 @@ public class SymbiocreationController {
     }
 
     @GetMapping("/getAllPublic/{page}")
-    public Flux<Symbiocreation> findPublicAll(@PathVariable int page) {
-        // Pageable sortedByPriceDescNameAsc =
-        //  PageRequest.of(0, 5, Sort.by("price").descending().and(Sort.by("name")));
+    public Flux<Symbiocreation> findPublicAll(@PathVariable int page,
+                                               @RequestParam(required = false) String name) {
         Pageable paging = PageRequest.of(page, 20);
+        if (name != null && !name.isBlank()) {
+            return symbioService.findByVisibilityAndNameContainingIgnoreCase("public", name, paging)
+                    .flatMap(this::completeUsers);
+        }
         return symbioService.findByVisibilityOrderByLastModifiedDesc("public", paging)
                 .flatMap(this::completeUsers);
     }
 
     @GetMapping("/getUpcomingPublic/{page}")
-    public Flux<Symbiocreation> findPublicUpcoming(@PathVariable int page) {
+    public Flux<Symbiocreation> findPublicUpcoming(@PathVariable int page,
+                                                    @RequestParam(required = false) String name) {
         Pageable paging = PageRequest.of(page, 20, Sort.by("dateTime").ascending());
+        if (name != null && !name.isBlank()) {
+            return symbioService.findByVisibilityAndDateTimeGreaterThanEqualAndNameContainingIgnoreCase("public", new Date(), name, paging)
+                    .flatMap(this::completeUsers);
+        }
         return symbioService.findByVisibilityAndDateTimeGreaterThanEqual("public", new Date(), paging)
                 .flatMap(this::completeUsers);
     }
 
     @GetMapping("/getPastPublic/{page}")
-    public Flux<Symbiocreation> findPublicPast(@PathVariable int page) {
+    public Flux<Symbiocreation> findPublicPast(@PathVariable int page,
+                                                @RequestParam(required = false) String name) {
         Pageable paging = PageRequest.of(page, 20, Sort.by("dateTime").descending());
+        if (name != null && !name.isBlank()) {
+            return symbioService.findByVisibilityAndDateTimeLessThanEqualAndNameContainingIgnoreCase("public", new Date(), name, paging)
+                    .flatMap(this::completeUsers);
+        }
         return symbioService.findByVisibilityAndDateTimeLessThanEqual("public", new Date(), paging)
                 .flatMap(this::completeUsers);
     }

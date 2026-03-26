@@ -26,9 +26,15 @@ public interface ISymbiocreationService {
 
     Flux<Symbiocreation> findByVisibilityOrderByLastModifiedDesc(String visibility, Pageable pageable);
 
+    Flux<Symbiocreation> findByVisibilityAndNameContainingIgnoreCase(String visibility, String name, Pageable pageable);
+
     Flux<Symbiocreation> findByVisibilityAndDateTimeLessThanEqual(String visibility, Date now, Pageable pageable);
 
+    Flux<Symbiocreation> findByVisibilityAndDateTimeLessThanEqualAndNameContainingIgnoreCase(String visibility, Date now, String name, Pageable pageable);
+
     Flux<Symbiocreation> findByVisibilityAndDateTimeGreaterThanEqual(String visibility, Date now, Pageable pageable);
+
+    Flux<Symbiocreation> findByVisibilityAndDateTimeGreaterThanEqualAndNameContainingIgnoreCase(String visibility, Date now, String name, Pageable pageable);
 
     Mono<Symbiocreation> update(Symbiocreation e);
 
