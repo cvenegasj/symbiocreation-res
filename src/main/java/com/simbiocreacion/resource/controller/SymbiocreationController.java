@@ -318,25 +318,17 @@ public class SymbiocreationController {
                                 .flatMap(node -> this.llmService.getIdeasForGroupFromLlm(symbio, node)));
     }
 
+    // TODO [Manera recomendada]: Al actualizar Spring AI y revertir getImageFromLlm a Mono<Image>,
+    //  cambiar este método para recibir Image y usar UrlResource con image.getUrl() como antes.
     @PostMapping("/getImageFromAI")
     @ResponseBody
-    public ResponseEntity<Mono<Resource>> getImagesFromAI(@RequestBody IdeaRequest idea) {
+    public Mono<ResponseEntity<byte[]>> getImagesFromAI(@RequestBody IdeaRequest idea) {
 
-        Mono<Resource> resourceMono = this.llmService.getImageFromLlm(idea)
-                .map(image -> {
-                    URI uri = URI.create(image.getUrl());
-                    Resource resource = null;
-                    try {
-                        resource = new UrlResource(uri);
-                    } catch (MalformedURLException e) {
-                        throw new RuntimeException(e);
-                    }
-                    return resource;
-                });
-
-        return ResponseEntity.ok()
-                .contentType(MediaType.IMAGE_PNG)
-                .body(resourceMono);
+        return this.llmService.getImageFromLlm(idea)
+                .map(imageBytes -> ResponseEntity.ok()
+                        .contentType(MediaType.IMAGE_PNG)
+                        .body(imageBytes))
+                .defaultIfEmpty(ResponseEntity.notFound().build());
     }
 
     @GetMapping(value = "/getImageFromAi2", produces = MediaType.IMAGE_PNG_VALUE)

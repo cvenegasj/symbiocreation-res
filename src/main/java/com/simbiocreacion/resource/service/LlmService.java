@@ -1,5 +1,7 @@
 package com.simbiocreacion.resource.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.simbiocreacion.resource.dto.IdeaAiResponse;
 import com.simbiocreacion.resource.dto.IdeaRequest;
 import com.simbiocreacion.resource.dto.TrendAiResponse;
@@ -13,19 +15,17 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
-import org.springframework.ai.image.Image;
-import org.springframework.ai.image.ImageMessage;
-import org.springframework.ai.image.ImageModel;
-import org.springframework.ai.image.ImagePrompt;
-import org.springframework.ai.openai.OpenAiImageOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.Resource;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClient;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +38,12 @@ import java.util.stream.Collectors;
 public class LlmService implements ILlmService {
 
     private final ChatClient chatClient;
-    private final ImageModel imageModel;
+
+    // TODO [Manera recomendada]: Al actualizar Spring AI a una versión que soporte gpt-image-1,
+    //  reemplazar este WebClient por ImageModel de Spring AI:
+    //  private final ImageModel imageModel;
+    private final WebClient openAiWebClient;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("classpath:/prompts/system-for-symbio-ideas.md")
     private Resource systemForSymbioIdeas;
@@ -65,7 +70,7 @@ public class LlmService implements ILlmService {
     private static final String USER_IDEA_TEMPLATE = """
             Título: %s
             Descripción: %s
-            
+
             """;
     private static final String USER_QUERY_TEMPLATE_1 = """
             Give me three new ideas for the topic given to you.
@@ -86,16 +91,27 @@ public class LlmService implements ILlmService {
     private static final String NO_IDEAS_FOR_SYMBIO_MSG = "Para usar esta funcionalidad, los participantes deben agregar al menos una idea a la sesión. Una vez que haya ideas disponibles, la IA podrá generar nuevas sugerencias basadas en ellas.";
     private static final String NO_IDEAS_FOR_GROUP_MSG = "Para consolidar ideas del grupo, los participantes deben agregar al menos una idea. Una vez que haya ideas disponibles, la IA podrá generar sugerencias consolidadas.";
 
-    public LlmService(ChatClient.Builder builder, ImageModel imageModel) {
+    // TODO [Manera recomendada]: Al actualizar Spring AI, cambiar la firma del constructor a:
+    //  public LlmService(ChatClient.Builder builder, ImageModel imageModel)
+    //  y eliminar el WebClient y apiKey.
+    public LlmService(ChatClient.Builder builder,
+                      @Value("${spring.ai.openai.api-key}") String openAiApiKey) {
         this.chatClient = builder.build();
-        this.imageModel = imageModel;
+        this.openAiWebClient = WebClient.builder()
+                .baseUrl("https://api.openai.com/v1")
+                .defaultHeader("Authorization", "Bearer " + openAiApiKey)
+                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(10 * 1024 * 1024)) // 10 MB para imágenes base64
+                .build();
     }
 
     @Override
     public Mono<List<IdeaAiResponse>> getIdeasForSymbioFromLlm(Symbiocreation symbiocreation) {
+        log.debug("Getting ideas from LLM for symbiocreation: {}", symbiocreation.getId());
         List<Idea> existingIdeas = getIdeasFromSymbiocreation(symbiocreation, 3);
+        log.debug("Found {} existing ideas in symbiocreation", existingIdeas.size());
 
         if (existingIdeas.isEmpty()) {
+            log.info("No existing ideas found for symbiocreation: {}, returning default message", symbiocreation.getId());
             return Mono.just(List.of(new IdeaAiResponse(NO_IDEAS_TITLE, NO_IDEAS_FOR_SYMBIO_MSG)));
         }
 
@@ -127,27 +143,34 @@ public class LlmService implements ILlmService {
 
             Prompt prompt = new Prompt(List.of(
                     new SystemMessage(systemForSymbioIdeas), userProblem, userIdeas, userQuery));
+            log.debug("Sending prompt to LLM for symbiocreation: {}", symbiocreation.getId());
             String content = chatClient.prompt(prompt).call().content();
+            log.debug("Received response from LLM: {}", content);
             List<IdeaAiResponse> llmResponse = outputConverter.convert(content);
+            log.debug("Parsed {} ideas from LLM response", llmResponse != null ? llmResponse.size() : 0);
 
             return validateResponse(llmResponse);
         })
         .subscribeOn(Schedulers.boundedElastic())
         .onErrorResume(e -> {
-            log.error("Error getting ideas from LLM for symbiocreation: {}", symbiocreation.getId(), e);
+            log.error("Error getting ideas from LLM for symbiocreation: {}. Error type: {}. Message: {}",
+                    symbiocreation.getId(), e.getClass().getSimpleName(), e.getMessage(), e);
             return Mono.just(Collections.emptyList());
         });
     }
 
     @Override
     public Mono<List<IdeaAiResponse>> getIdeasForGroupFromLlm(Symbiocreation symbiocreation, Node group) {
+        log.debug("Getting ideas from LLM for group: {} in symbiocreation: {}", group.getId(), symbiocreation.getId());
         List<Idea> groupIdeas = group.getChildren().stream()
                 .map(Node::getIdea)
                 .filter(Objects::nonNull)
                 .filter(TITLE_OR_DESCRIPTION_EXISTS_PREDICATE)
                 .toList();
+        log.debug("Found {} ideas in group", groupIdeas.size());
 
         if (groupIdeas.isEmpty()) {
+            log.info("No ideas found in group: {}, returning default message", group.getId());
             return Mono.just(List.of(new IdeaAiResponse(NO_IDEAS_TITLE, NO_IDEAS_FOR_GROUP_MSG)));
         }
 
@@ -179,40 +202,76 @@ public class LlmService implements ILlmService {
 
             Prompt prompt = new Prompt(List.of(
                     new SystemMessage(systemForGroupIdeas), userSession, userIdeas, userQuery));
+            log.debug("Sending prompt to LLM for group: {}", group.getId());
             String content = chatClient.prompt(prompt).call().content();
+            log.debug("Received response from LLM: {}", content);
             List<IdeaAiResponse> llmResponse = outputConverter.convert(content);
+            log.debug("Parsed {} ideas from LLM response", llmResponse != null ? llmResponse.size() : 0);
 
             return validateResponse(llmResponse);
         })
         .subscribeOn(Schedulers.boundedElastic())
         .onErrorResume(e -> {
-            log.error("Error getting ideas from LLM for group: {} in symbiocreation: {}",
-                    group.getId(), symbiocreation.getId(), e);
+            log.error("Error getting ideas from LLM for group: {} in symbiocreation: {}. Error type: {}. Message: {}",
+                    group.getId(), symbiocreation.getId(), e.getClass().getSimpleName(), e.getMessage(), e);
             return Mono.just(Collections.emptyList());
         });
     }
 
+    // TODO [Manera recomendada]: Al actualizar Spring AI a una versión que soporte gpt-image-1,
+    //  reemplazar todo este método por el uso de ImageModel de Spring AI:
+    //
+    //  @Override
+    //  public Mono<Image> getImageFromLlm(IdeaRequest idea) {
+    //      return Mono.fromCallable(() -> {
+    //          ImagePrompt imagePrompt = new ImagePrompt(
+    //              new ImageMessage(sanitizeInput(idea.title()) + "\n" + sanitizeInput(idea.description())),
+    //              OpenAiImageOptions.builder()
+    //                  .withModel("gpt-image-1")
+    //                  .withQuality("high")
+    //                  .withN(1)
+    //                  .withHeight(1024)
+    //                  .withWidth(1024)
+    //                  .build());
+    //          return imageModel.call(imagePrompt).getResult().getOutput();
+    //      })
+    //      .subscribeOn(Schedulers.boundedElastic())
+    //      .onErrorResume(e -> {
+    //          log.error("Error generating image from LLM for idea: {}", idea.title(), e);
+    //          return Mono.empty();
+    //      });
+    //  }
     @Override
-    public Mono<Image> getImageFromLlm(IdeaRequest idea) {
-        return Mono.fromCallable(() -> {
-            String sanitizedTitle = sanitizeInput(idea.title());
-            String sanitizedDescription = sanitizeInput(idea.description());
-            String messageContent = sanitizedTitle + "\n" + sanitizedDescription;
+    public Mono<byte[]> getImageFromLlm(IdeaRequest idea) {
+        String sanitizedTitle = sanitizeInput(idea.title());
+        String sanitizedDescription = sanitizeInput(idea.description());
+        String prompt = sanitizedTitle + "\n" + sanitizedDescription;
 
-            ImageMessage imageMessage = new ImageMessage(messageContent);
-            ImagePrompt imagePrompt = new ImagePrompt(imageMessage, OpenAiImageOptions.builder()
-                    .withQuality("hd")
-                    .withN(1)
-                    .withHeight(1024)
-                    .withWidth(1024)
-                    .build());
-            return imageModel.call(imagePrompt).getResult().getOutput();
-        })
-        .subscribeOn(Schedulers.boundedElastic())
-        .onErrorResume(e -> {
-            log.error("Error generating image from LLM for idea: {}", idea.title(), e);
-            return Mono.empty();
-        });
+        Map<String, Object> requestBody = Map.of(
+                "model", "gpt-image-1",
+                "prompt", prompt,
+                "n", 1,
+                "size", "1024x1024",
+                "quality", "medium"
+        );
+
+        return openAiWebClient.post()
+                .uri("/images/generations")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(String.class)
+                .map(responseBody -> {
+                    try {
+                        JsonNode root = objectMapper.readTree(responseBody);
+                        String b64Data = root.path("data").get(0).path("b64_json").asText();
+                        return Base64.getDecoder().decode(b64Data);
+                    } catch (Exception e) {
+                        throw new RuntimeException("Error parsing image response from OpenAI", e);
+                    }
+                })
+                .doOnError(e -> log.error("Error generating image from OpenAI for idea: {}", idea.title(), e))
+                .onErrorResume(e -> Mono.empty());
     }
 
     @Override
