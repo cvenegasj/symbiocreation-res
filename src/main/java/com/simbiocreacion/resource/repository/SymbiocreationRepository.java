@@ -25,6 +25,10 @@ public interface SymbiocreationRepository extends ReactiveMongoRepository<Symbio
     @Query(fields = "{'graph': 0}")
     Flux<Symbiocreation> findByVisibilityOrderByLastModifiedDesc(String visibility, Pageable pageable);
 
+    // Search by name (case-insensitive, partial match)
+    @Query(value = "{'visibility': ?0, 'name': {$regex: ?1, $options: 'i'}}", fields = "{'graph': 0}")
+    Flux<Symbiocreation> findByVisibilityAndNameContainingIgnoreCase(String visibility, String name, Pageable pageable);
+
     //@Query(value = "{'visibility': ?0, 'dateTime' : {'$gt' : ?1}}", fields = "{'graph': 0}", sort = "{dateTime: 1}")
     //Flux<Symbiocreation> findUpcomingByVisibility(String visibility, Date now);
 
@@ -32,8 +36,14 @@ public interface SymbiocreationRepository extends ReactiveMongoRepository<Symbio
     @Query(fields = "{'graph': 0}")
     Flux<Symbiocreation> findByVisibilityAndDateTimeLessThanEqual(String visibility, Date now, Pageable pageable);
 
+    @Query(value = "{'visibility': ?0, 'dateTime': {'$lte': ?1}, 'name': {$regex: ?2, $options: 'i'}}", fields = "{'graph': 0}")
+    Flux<Symbiocreation> findByVisibilityAndDateTimeLessThanEqualAndNameContainingIgnoreCase(String visibility, Date now, String name, Pageable pageable);
+
     @Query(fields = "{'graph': 0}")
     Flux<Symbiocreation> findByVisibilityAndDateTimeGreaterThanEqual(String visibility, Date now, Pageable pageable);
+
+    @Query(value = "{'visibility': ?0, 'dateTime': {'$gte': ?1}, 'name': {$regex: ?2, $options: 'i'}}", fields = "{'graph': 0}")
+    Flux<Symbiocreation> findByVisibilityAndDateTimeGreaterThanEqualAndNameContainingIgnoreCase(String visibility, Date now, String name, Pageable pageable);
 
     Mono<Long> countByVisibility(String visibility);
 

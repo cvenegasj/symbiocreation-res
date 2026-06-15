@@ -180,24 +180,37 @@ public class SymbiocreationController {
     }
 
     @GetMapping("/getAllPublic/{page}")
-    public Flux<Symbiocreation> findPublicAll(@PathVariable int page) {
-        // Pageable sortedByPriceDescNameAsc =
-        //  PageRequest.of(0, 5, Sort.by("price").descending().and(Sort.by("name")));
+    public Flux<Symbiocreation> findPublicAll(@PathVariable int page,
+                                               @RequestParam(required = false) String name) {
         Pageable paging = PageRequest.of(page, 20);
+        if (name != null && !name.isBlank()) {
+            return symbioService.findByVisibilityAndNameContainingIgnoreCase("public", name, paging)
+                    .flatMap(this::completeUsers);
+        }
         return symbioService.findByVisibilityOrderByLastModifiedDesc("public", paging)
                 .flatMap(this::completeUsers);
     }
 
     @GetMapping("/getUpcomingPublic/{page}")
-    public Flux<Symbiocreation> findPublicUpcoming(@PathVariable int page) {
+    public Flux<Symbiocreation> findPublicUpcoming(@PathVariable int page,
+                                                    @RequestParam(required = false) String name) {
         Pageable paging = PageRequest.of(page, 20, Sort.by("dateTime").ascending());
+        if (name != null && !name.isBlank()) {
+            return symbioService.findByVisibilityAndDateTimeGreaterThanEqualAndNameContainingIgnoreCase("public", new Date(), name, paging)
+                    .flatMap(this::completeUsers);
+        }
         return symbioService.findByVisibilityAndDateTimeGreaterThanEqual("public", new Date(), paging)
                 .flatMap(this::completeUsers);
     }
 
     @GetMapping("/getPastPublic/{page}")
-    public Flux<Symbiocreation> findPublicPast(@PathVariable int page) {
+    public Flux<Symbiocreation> findPublicPast(@PathVariable int page,
+                                                @RequestParam(required = false) String name) {
         Pageable paging = PageRequest.of(page, 20, Sort.by("dateTime").descending());
+        if (name != null && !name.isBlank()) {
+            return symbioService.findByVisibilityAndDateTimeLessThanEqualAndNameContainingIgnoreCase("public", new Date(), name, paging)
+                    .flatMap(this::completeUsers);
+        }
         return symbioService.findByVisibilityAndDateTimeLessThanEqual("public", new Date(), paging)
                 .flatMap(this::completeUsers);
     }
@@ -305,25 +318,17 @@ public class SymbiocreationController {
                                 .flatMap(node -> this.llmService.getIdeasForGroupFromLlm(symbio, node)));
     }
 
+    // TODO [Manera recomendada]: Al actualizar Spring AI y revertir getImageFromLlm a Mono<Image>,
+    //  cambiar este método para recibir Image y usar UrlResource con image.getUrl() como antes.
     @PostMapping("/getImageFromAI")
     @ResponseBody
-    public ResponseEntity<Mono<Resource>> getImagesFromAI(@RequestBody IdeaRequest idea) {
+    public Mono<ResponseEntity<byte[]>> getImagesFromAI(@RequestBody IdeaRequest idea) {
 
-        Mono<Resource> resourceMono = this.llmService.getImageFromLlm(idea)
-                .map(image -> {
-                    URI uri = URI.create(image.getUrl());
-                    Resource resource = null;
-                    try {
-                        resource = new UrlResource(uri);
-                    } catch (MalformedURLException e) {
-                        throw new RuntimeException(e);
-                    }
-                    return resource;
-                });
-
-        return ResponseEntity.ok()
-                .contentType(MediaType.IMAGE_PNG)
-                .body(resourceMono);
+        return this.llmService.getImageFromLlm(idea)
+                .map(imageBytes -> ResponseEntity.ok()
+                        .contentType(MediaType.IMAGE_PNG)
+                        .body(imageBytes))
+                .defaultIfEmpty(ResponseEntity.notFound().build());
     }
 
     @GetMapping(value = "/getImageFromAi2", produces = MediaType.IMAGE_PNG_VALUE)

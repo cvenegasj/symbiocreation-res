@@ -67,13 +67,28 @@ public class SymbiocreationService implements ISymbiocreationService {
     }
 
     @Override
+    public Flux<Symbiocreation> findByVisibilityAndNameContainingIgnoreCase(String visibility, String name, Pageable pageable) {
+        return symbioRepository.findByVisibilityAndNameContainingIgnoreCase(visibility, name, pageable);
+    }
+
+    @Override
     public Flux<Symbiocreation> findByVisibilityAndDateTimeLessThanEqual(String visibility, Date now, Pageable pageable) {
         return symbioRepository.findByVisibilityAndDateTimeLessThanEqual(visibility, now, pageable);
     }
 
     @Override
+    public Flux<Symbiocreation> findByVisibilityAndDateTimeLessThanEqualAndNameContainingIgnoreCase(String visibility, Date now, String name, Pageable pageable) {
+        return symbioRepository.findByVisibilityAndDateTimeLessThanEqualAndNameContainingIgnoreCase(visibility, now, name, pageable);
+    }
+
+    @Override
     public Flux<Symbiocreation> findByVisibilityAndDateTimeGreaterThanEqual(String visibility, Date now, Pageable pageable) {
         return symbioRepository.findByVisibilityAndDateTimeGreaterThanEqual(visibility, now, pageable);
+    }
+
+    @Override
+    public Flux<Symbiocreation> findByVisibilityAndDateTimeGreaterThanEqualAndNameContainingIgnoreCase(String visibility, Date now, String name, Pageable pageable) {
+        return symbioRepository.findByVisibilityAndDateTimeGreaterThanEqualAndNameContainingIgnoreCase(visibility, now, name, pageable);
     }
 
     @Override
