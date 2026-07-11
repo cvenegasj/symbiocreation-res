@@ -18,9 +18,12 @@ import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.Resource;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.web.server.ResponseStatusException;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -77,6 +80,13 @@ public class LlmService implements ILlmService {
             {format}
             """;
 
+    private static final String USER_QUERY_INSPIRATION_TEMPLATE = """
+            Give me three new ideas for the topic given to you.
+            Write every idea entirely in Spanish: both the title and the description must be in Spanish,
+            even if the topic is written in another language.
+            {format}
+            """;
+
     private static final String USER_QUERY_TEMPLATE_2 = """
             Give me a new idea that summarizes all the ideas given to you.
             {format}
@@ -90,6 +100,16 @@ public class LlmService implements ILlmService {
     private static final String NO_IDEAS_TITLE = "Se necesitan más ideas";
     private static final String NO_IDEAS_FOR_SYMBIO_MSG = "Para usar esta funcionalidad, los participantes deben agregar al menos una idea a la sesión. Una vez que haya ideas disponibles, la IA podrá generar nuevas sugerencias basadas en ellas.";
     private static final String NO_IDEAS_FOR_GROUP_MSG = "Para consolidar ideas del grupo, los participantes deben agregar al menos una idea. Una vez que haya ideas disponibles, la IA podrá generar sugerencias consolidadas.";
+
+    // Mensaje de respuesta cuando no hay tema (name/description) para generar inspiración
+    private static final String NO_TOPIC_TITLE = "Falta un tema";
+    private static final String NO_TOPIC_MSG = "Agrega un nombre o una descripción a la sesión para generar ideas de inspiración.";
+
+    // Directiva para la generación de imágenes: evitar que el modelo dibuje texto
+    // (gpt-image-1 tiende a renderizar texto, a menudo ilegible o con errores).
+    private static final String IMAGE_NO_TEXT_DIRECTIVE =
+            "Do not include any text, letters, words, numbers, labels, captions, typography, or watermarks anywhere in the image. "
+            + "Produce a clean, purely visual illustration with no written characters of any kind.";
 
     // TODO [Manera recomendada]: Al actualizar Spring AI, cambiar la firma del constructor a:
     //  public LlmService(ChatClient.Builder builder, ImageModel imageModel)
@@ -112,7 +132,7 @@ public class LlmService implements ILlmService {
 
         if (existingIdeas.isEmpty()) {
             log.info("No existing ideas found for symbiocreation: {}, returning default message", symbiocreation.getId());
-            return Mono.just(List.of(new IdeaAiResponse(NO_IDEAS_TITLE, NO_IDEAS_FOR_SYMBIO_MSG)));
+            return Mono.just(List.of(new IdeaAiResponse(NO_IDEAS_TITLE, NO_IDEAS_FOR_SYMBIO_MSG, true)));
         }
 
         return Mono.fromCallable(() -> {
@@ -160,6 +180,52 @@ public class LlmService implements ILlmService {
     }
 
     @Override
+    public Mono<List<IdeaAiResponse>> getInspirationIdeasFromLlm(Symbiocreation symbiocreation) {
+        log.debug("Getting inspiration ideas from LLM for symbiocreation: {}", symbiocreation.getId());
+
+        String name = symbiocreation.getName();
+        String description = symbiocreation.getDescription();
+        boolean hasTopic = (name != null && !name.trim().isEmpty())
+                || (description != null && !description.trim().isEmpty());
+
+        if (!hasTopic) {
+            log.info("No topic (name/description) for symbiocreation: {}, cannot generate inspiration", symbiocreation.getId());
+            return Mono.just(List.of(new IdeaAiResponse(NO_TOPIC_TITLE, NO_TOPIC_MSG, true)));
+        }
+
+        return Mono.fromCallable(() -> {
+            PromptTemplate userProblemPromptTemplate = new PromptTemplate(
+                    USER_PROBLEM_TEMPLATE_1,
+                    Map.of("symbiocreationName", sanitizeInput(name),
+                            "symbiocreationDescription", sanitizeInput(description)));
+            Message userProblem = userProblemPromptTemplate.createMessage();
+
+            BeanOutputConverter<List<IdeaAiResponse>> outputConverter = new BeanOutputConverter<>(
+                    new ParameterizedTypeReference<List<IdeaAiResponse>>() { });
+            PromptTemplate userQueryTemplate = new PromptTemplate(
+                    USER_QUERY_INSPIRATION_TEMPLATE,
+                    Map.of("format", outputConverter.getFormat()));
+            Message userQuery = userQueryTemplate.createMessage();
+
+            // Sin bloque de "ideas de participantes": la inspiración se basa solo en el tema.
+            Prompt prompt = new Prompt(List.of(
+                    new SystemMessage(systemForSymbioIdeas), userProblem, userQuery));
+            log.debug("Sending inspiration prompt to LLM for symbiocreation: {}", symbiocreation.getId());
+            String content = chatClient.prompt(prompt).call().content();
+            log.debug("Received inspiration response from LLM: {}", content);
+            List<IdeaAiResponse> llmResponse = outputConverter.convert(content);
+
+            return validateResponse(llmResponse);
+        })
+        .subscribeOn(Schedulers.boundedElastic())
+        .onErrorResume(e -> {
+            log.error("Error getting inspiration ideas from LLM for symbiocreation: {}. Error type: {}. Message: {}",
+                    symbiocreation.getId(), e.getClass().getSimpleName(), e.getMessage(), e);
+            return Mono.just(Collections.emptyList());
+        });
+    }
+
+    @Override
     public Mono<List<IdeaAiResponse>> getIdeasForGroupFromLlm(Symbiocreation symbiocreation, Node group) {
         log.debug("Getting ideas from LLM for group: {} in symbiocreation: {}", group.getId(), symbiocreation.getId());
         List<Idea> groupIdeas = group.getChildren().stream()
@@ -171,7 +237,7 @@ public class LlmService implements ILlmService {
 
         if (groupIdeas.isEmpty()) {
             log.info("No ideas found in group: {}, returning default message", group.getId());
-            return Mono.just(List.of(new IdeaAiResponse(NO_IDEAS_TITLE, NO_IDEAS_FOR_GROUP_MSG)));
+            return Mono.just(List.of(new IdeaAiResponse(NO_IDEAS_TITLE, NO_IDEAS_FOR_GROUP_MSG, true)));
         }
 
         return Mono.fromCallable(() -> {
@@ -245,7 +311,7 @@ public class LlmService implements ILlmService {
     public Mono<byte[]> getImageFromLlm(IdeaRequest idea) {
         String sanitizedTitle = sanitizeInput(idea.title());
         String sanitizedDescription = sanitizeInput(idea.description());
-        String prompt = sanitizedTitle + "\n" + sanitizedDescription;
+        String prompt = sanitizedTitle + "\n" + sanitizedDescription + "\n\n" + IMAGE_NO_TEXT_DIRECTIVE;
 
         Map<String, Object> requestBody = Map.of(
                 "model", "gpt-image-1",
@@ -271,7 +337,35 @@ public class LlmService implements ILlmService {
                     }
                 })
                 .doOnError(e -> log.error("Error generating image from OpenAI for idea: {}", idea.title(), e))
-                .onErrorResume(e -> Mono.empty());
+                .onErrorMap(this::mapImageError);
+    }
+
+    // I2: traduce el error de OpenAI a un estado HTTP que el frontend pueda distinguir.
+    //  503: sin cuota · 422: contenido bloqueado por políticas · 502: fallo genérico.
+    private Throwable mapImageError(Throwable e) {
+        if (e instanceof WebClientResponseException wcre) {
+            int status = wcre.getStatusCode().value();
+            String code = "";
+            String type = "";
+            String message = "";
+            try {
+                JsonNode error = objectMapper.readTree(wcre.getResponseBodyAsString()).path("error");
+                code = error.path("code").asText("");
+                type = error.path("type").asText("");
+                message = error.path("message").asText("");
+            } catch (Exception ignore) {
+                // cuerpo de error no parseable: se tratará como fallo genérico
+            }
+
+            if (status == 429 || "insufficient_quota".equals(code)) {
+                return new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "insufficient_quota", e);
+            }
+            String combined = (code + " " + type + " " + message).toLowerCase();
+            if (combined.contains("content_policy") || combined.contains("moderation") || combined.contains("safety")) {
+                return new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "content_policy", e);
+            }
+        }
+        return new ResponseStatusException(HttpStatus.BAD_GATEWAY, "generation_failed", e);
     }
 
     @Override

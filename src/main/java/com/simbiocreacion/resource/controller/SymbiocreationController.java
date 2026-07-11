@@ -318,6 +318,14 @@ public class SymbiocreationController {
                                 .flatMap(node -> this.llmService.getIdeasForGroupFromLlm(symbio, node)));
     }
 
+    // "Busco inspiración": genera 3 ideas basadas solo en el tema de la sesión (name + description),
+    // sin requerir ideas existentes. Sirve tanto para nodos hoja como para grupos.
+    @GetMapping("/{id}/getInspirationFromAI")
+    public Mono<List<IdeaAiResponse>> getInspirationFromAI(@PathVariable String id) {
+        return this.symbioService.findById(id)
+                .flatMap(this.llmService::getInspirationIdeasFromLlm);
+    }
+
     // TODO [Manera recomendada]: Al actualizar Spring AI y revertir getImageFromLlm a Mono<Image>,
     //  cambiar este método para recibir Image y usar UrlResource con image.getUrl() como antes.
     @PostMapping("/getImageFromAI")
