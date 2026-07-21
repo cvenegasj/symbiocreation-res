@@ -62,13 +62,13 @@ public class SymbiocreationService implements ISymbiocreationService {
     }
 
     @Override
-    public Flux<Symbiocreation> findByVisibilityOrderByLastModifiedDesc(String visibility, Pageable pageable) {
-        return symbioRepository.findByVisibilityOrderByLastModifiedDesc(visibility, pageable);
+    public Flux<Symbiocreation> findPublicFiltered(String visibility, String name, Date from, Date to, Pageable pageable) {
+        return symbioRepository.findPublicFiltered(visibility, name, from, to, pageable);
     }
 
     @Override
-    public Flux<Symbiocreation> findByVisibilityAndNameContainingIgnoreCase(String visibility, String name, Pageable pageable) {
-        return symbioRepository.findByVisibilityAndNameContainingIgnoreCase(visibility, name, pageable);
+    public Mono<Long> countPublicFiltered(String visibility, String name, Date from, Date to) {
+        return symbioRepository.countPublicFiltered(visibility, name, from, to);
     }
 
     @Override

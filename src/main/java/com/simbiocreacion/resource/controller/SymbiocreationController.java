@@ -179,15 +179,18 @@ public class SymbiocreationController {
                 .flatMap(this::completeUsers); // users needed for displaying participants' names in grid or list view
     }
 
+    // Explore: público filtrado por nombre (opcional) y rango de fecha de creación (from/to en epoch millis, opcionales),
+    // ordenado por creationDateTime desc.
     @GetMapping("/getAllPublic/{page}")
     public Flux<Symbiocreation> findPublicAll(@PathVariable int page,
-                                               @RequestParam(required = false) String name) {
-        Pageable paging = PageRequest.of(page, 20);
-        if (name != null && !name.isBlank()) {
-            return symbioService.findByVisibilityAndNameContainingIgnoreCase("public", name, paging)
-                    .flatMap(this::completeUsers);
-        }
-        return symbioService.findByVisibilityOrderByLastModifiedDesc("public", paging)
+                                              @RequestParam(required = false) String name,
+                                              @RequestParam(required = false) Long from,
+                                              @RequestParam(required = false) Long to) {
+        Pageable paging = PageRequest.of(page, 20, Sort.by("creationDateTime").descending());
+        return symbioService.findPublicFiltered("public", name,
+                        from != null ? new Date(from) : null,
+                        to != null ? new Date(to) : null,
+                        paging)
                 .flatMap(this::completeUsers);
     }
 
@@ -221,8 +224,12 @@ public class SymbiocreationController {
     }
 
     @GetMapping("/countPublic")
-    public Mono<Long> countPublicSymbiocreations() {
-        return symbioService.countByVisibility("public");
+    public Mono<Long> countPublicSymbiocreations(@RequestParam(required = false) String name,
+                                                 @RequestParam(required = false) Long from,
+                                                 @RequestParam(required = false) Long to) {
+        return symbioService.countPublicFiltered("public", name,
+                from != null ? new Date(from) : null,
+                to != null ? new Date(to) : null);
     }
 
     @GetMapping("/countPastPublic")

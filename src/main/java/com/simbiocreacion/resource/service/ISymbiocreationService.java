@@ -24,9 +24,9 @@ public interface ISymbiocreationService {
 
     Flux<Symbiocreation> findAllByUser(String userId, Pageable pageable);
 
-    Flux<Symbiocreation> findByVisibilityOrderByLastModifiedDesc(String visibility, Pageable pageable);
+    Flux<Symbiocreation> findPublicFiltered(String visibility, String name, Date from, Date to, Pageable pageable);
 
-    Flux<Symbiocreation> findByVisibilityAndNameContainingIgnoreCase(String visibility, String name, Pageable pageable);
+    Mono<Long> countPublicFiltered(String visibility, String name, Date from, Date to);
 
     Flux<Symbiocreation> findByVisibilityAndDateTimeLessThanEqual(String visibility, Date now, Pageable pageable);
 

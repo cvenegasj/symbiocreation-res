@@ -15,6 +15,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.Resource;
@@ -28,6 +29,8 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
@@ -56,6 +59,13 @@ public class LlmService implements ILlmService {
 
     @Value("classpath:/prompts/user-for-symbio-trends.st")
     private Resource userForSymbioTrends;
+
+    // Brief de dirección de arte para la generación de imágenes (lenguaje visual SIMBIO).
+    @Value("classpath:/prompts/system-for-image.md")
+    private Resource systemForImage;
+
+    // Contenido del brief cacheado una sola vez (ver loadImagePrompt).
+    private String imageArtDirection;
 
     private static final String USER_PROBLEM_TEMPLATE_1 = """
             This is the topic you need to address:
@@ -122,6 +132,15 @@ public class LlmService implements ILlmService {
                 .defaultHeader("Authorization", "Bearer " + openAiApiKey)
                 .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(10 * 1024 * 1024)) // 10 MB para imágenes base64
                 .build();
+    }
+
+    @PostConstruct
+    private void loadImagePrompt() {
+        try {
+            this.imageArtDirection = systemForImage.getContentAsString(StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo cargar el prompt de dirección de arte de imágenes (system-for-image.md)", e);
+        }
     }
 
     @Override
@@ -311,7 +330,10 @@ public class LlmService implements ILlmService {
     public Mono<byte[]> getImageFromLlm(IdeaRequest idea) {
         String sanitizedTitle = sanitizeInput(idea.title());
         String sanitizedDescription = sanitizeInput(idea.description());
-        String prompt = sanitizedTitle + "\n" + sanitizedDescription + "\n\n" + IMAGE_NO_TEXT_DIRECTIVE;
+        // Brief de dirección de arte (marco) + la idea (protagonista) + restricción técnica de no-texto (al final).
+        String prompt = imageArtDirection + "\n\n"
+                + sanitizedTitle + "\n" + sanitizedDescription + "\n\n"
+                + IMAGE_NO_TEXT_DIRECTIVE;
 
         Map<String, Object> requestBody = Map.of(
                 "model", "gpt-image-1",
