@@ -100,6 +100,11 @@ public class SymbiocreationRepositoryImpl implements SymbiocreationRepositoryCus
         return this.rxMongoTemplate.count(buildFilterQuery(visibility, name, from, to), Symbiocreation.class);
     }
 
+    @Override
+    public Flux<Symbiocreation> findAllByVisibilityFull(String visibility) {
+        return this.rxMongoTemplate.find(new Query(Criteria.where("visibility").is(visibility)), Symbiocreation.class);
+    }
+
     // Arma el criterio combinando visibility + nombre (opcional) + rango de creationDateTime (from/to, opcionales).
     private Query buildFilterQuery(String visibility, String name, Date from, Date to) {
         List<Criteria> criterias = new ArrayList<>();

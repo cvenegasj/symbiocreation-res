@@ -28,6 +28,10 @@ public interface ISymbiocreationService {
 
     Mono<Long> countPublicFiltered(String visibility, String name, Date from, Date to);
 
+    // Ranking de simbios públicas para el frontpage. sort: "ideas" (cant. de ideas), "collaborators"
+    // (cant. de participantes) o "new" (fecha de creación); siempre DESC. name filtra por nombre (opcional).
+    Flux<Symbiocreation> getPublicRanked(String name, String sort, int limit);
+
     Flux<Symbiocreation> findByVisibilityAndDateTimeLessThanEqual(String visibility, Date now, Pageable pageable);
 
     Flux<Symbiocreation> findByVisibilityAndDateTimeLessThanEqualAndNameContainingIgnoreCase(String visibility, Date now, String name, Pageable pageable);

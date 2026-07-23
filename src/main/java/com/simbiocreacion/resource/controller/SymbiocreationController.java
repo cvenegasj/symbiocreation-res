@@ -194,6 +194,16 @@ public class SymbiocreationController {
                 .flatMap(this::completeUsers);
     }
 
+    // Ranking de públicas para el frontpage (Destacados = ideas, Nuevos = fecha creación, Más colaborados = participantes).
+    // flatMapSequential preserva el orden del ranking.
+    @GetMapping("/getPublicRanked")
+    public Flux<Symbiocreation> findPublicRanked(@RequestParam(required = false) String name,
+                                                 @RequestParam(required = false, defaultValue = "new") String sort,
+                                                 @RequestParam(required = false, defaultValue = "20") int limit) {
+        return symbioService.getPublicRanked(name, sort, limit)
+                .flatMapSequential(this::completeUsers);
+    }
+
     @GetMapping("/getUpcomingPublic/{page}")
     public Flux<Symbiocreation> findPublicUpcoming(@PathVariable int page,
                                                     @RequestParam(required = false) String name) {

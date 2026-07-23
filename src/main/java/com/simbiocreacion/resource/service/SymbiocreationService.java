@@ -72,6 +72,42 @@ public class SymbiocreationService implements ISymbiocreationService {
     }
 
     @Override
+    public Flux<Symbiocreation> getPublicRanked(String name, String sort, int limit) {
+        final String nameFilter = name == null ? "" : name.trim().toLowerCase();
+
+        return symbioRepository.findAllByVisibilityFull("public")
+                .filter(s -> nameFilter.isEmpty()
+                        || (s.getName() != null && s.getName().toLowerCase().contains(nameFilter)))
+                .collectList()
+                .flatMapMany(list -> {
+                    Comparator<Symbiocreation> cmp;
+                    if ("ideas".equals(sort)) {
+                        // Precalcula la cantidad de ideas por simbio (recorrer el grafo es costoso).
+                        final Map<String, Long> ideasCount = new HashMap<>();
+                        for (Symbiocreation s : list) {
+                            ideasCount.put(s.getId(), s.getGraph() != null ? countIdeasInSymbiocreation(s) : 0L);
+                        }
+                        cmp = Comparator.comparingLong(s -> ideasCount.getOrDefault(s.getId(), 0L));
+                    } else if ("collaborators".equals(sort)) {
+                        cmp = Comparator.comparingInt(s -> s.getParticipants() != null ? s.getParticipants().size() : 0);
+                    } else { // "new"
+                        cmp = Comparator.comparing(Symbiocreation::getCreationDateTime,
+                                Comparator.nullsFirst(Comparator.naturalOrder()));
+                    }
+
+                    List<Symbiocreation> ranked = list.stream()
+                            .sorted(cmp.reversed()) // siempre DESC
+                            .limit(limit)
+                            .collect(Collectors.toList());
+
+                    // El frontend no usa el grafo en las tarjetas: se descarta para aligerar el payload.
+                    ranked.forEach(s -> s.setGraph(null));
+
+                    return Flux.fromIterable(ranked);
+                });
+    }
+
+    @Override
     public Flux<Symbiocreation> findByVisibilityAndDateTimeLessThanEqual(String visibility, Date now, Pageable pageable) {
         return symbioRepository.findByVisibilityAndDateTimeLessThanEqual(visibility, now, pageable);
     }
