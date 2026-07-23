@@ -20,14 +20,8 @@ public interface SymbiocreationRepository extends ReactiveMongoRepository<Symbio
     //@Query(value = "{'visibility': ?0}", fields = "{'graph': 0}", sort = "{lastModified: -1}")
     //Flux<Symbiocreation> findAllByVisibility(String visibility);
 
-    // returns one page of all symbiocreations of a given visibility type
-    // returns Flux instead of Page<T> because Spring Data does not support Page as return type when using WebFlux
-    @Query(fields = "{'graph': 0}")
-    Flux<Symbiocreation> findByVisibilityOrderByLastModifiedDesc(String visibility, Pageable pageable);
-
-    // Search by name (case-insensitive, partial match)
-    @Query(value = "{'visibility': ?0, 'name': {$regex: ?1, $options: 'i'}}", fields = "{'graph': 0}")
-    Flux<Symbiocreation> findByVisibilityAndNameContainingIgnoreCase(String visibility, String name, Pageable pageable);
+    // El listado público del Explore (nombre + rango de fecha de creación) se resuelve dinámicamente
+    // en SymbiocreationRepositoryImpl.findPublicFiltered / countPublicFiltered.
 
     //@Query(value = "{'visibility': ?0, 'dateTime' : {'$gt' : ?1}}", fields = "{'graph': 0}", sort = "{dateTime: 1}")
     //Flux<Symbiocreation> findUpcomingByVisibility(String visibility, Date now);

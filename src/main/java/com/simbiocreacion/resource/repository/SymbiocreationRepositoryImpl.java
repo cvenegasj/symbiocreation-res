@@ -3,11 +3,18 @@ package com.simbiocreacion.resource.repository;
 import com.simbiocreacion.resource.model.Symbiocreation;
 import lombok.RequiredArgsConstructor;
 import org.bson.Document;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.*;
 import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
 
 @RequiredArgsConstructor
 public class SymbiocreationRepositoryImpl implements SymbiocreationRepositoryCustom {
@@ -79,5 +86,36 @@ public class SymbiocreationRepositoryImpl implements SymbiocreationRepositoryCus
         );
 
         return this.rxMongoTemplate.aggregate(aggregation, Symbiocreation.class);
+    }
+
+    @Override
+    public Flux<Symbiocreation> findPublicFiltered(String visibility, String name, Date from, Date to, Pageable pageable) {
+        Query query = buildFilterQuery(visibility, name, from, to).with(pageable);
+        query.fields().exclude("graph"); // payload liviano
+        return this.rxMongoTemplate.find(query, Symbiocreation.class);
+    }
+
+    @Override
+    public Mono<Long> countPublicFiltered(String visibility, String name, Date from, Date to) {
+        return this.rxMongoTemplate.count(buildFilterQuery(visibility, name, from, to), Symbiocreation.class);
+    }
+
+    // Arma el criterio combinando visibility + nombre (opcional) + rango de creationDateTime (from/to, opcionales).
+    private Query buildFilterQuery(String visibility, String name, Date from, Date to) {
+        List<Criteria> criterias = new ArrayList<>();
+        criterias.add(Criteria.where("visibility").is(visibility));
+
+        if (name != null && !name.isBlank()) {
+            criterias.add(Criteria.where("name").regex(name, "i"));
+        }
+
+        if (from != null || to != null) {
+            Criteria dateCriteria = Criteria.where("creationDateTime");
+            if (from != null) dateCriteria.gte(from);
+            if (to != null) dateCriteria.lte(to);
+            criterias.add(dateCriteria);
+        }
+
+        return new Query(new Criteria().andOperator(criterias.toArray(new Criteria[0])));
     }
 }
